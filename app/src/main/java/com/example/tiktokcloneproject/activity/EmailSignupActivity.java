@@ -59,27 +59,21 @@ public class EmailSignupActivity extends Activity{
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
-//        setContentView(R.layout.activity_email_signup);
 
-        edtEmail = (EditText) findViewById(R.id.edtEmail);
-        btnEmail = (Button) findViewById(R.id.btnEmail);
+        mAuth = FirebaseAuth.getInstance();
+        db = FirebaseFirestore.getInstance();
 
+        // SỬA LỖI: Dán trực tiếp Web Client ID thật vào đây
         GoogleSignInOptions gso = new GoogleSignInOptions.Builder(GoogleSignInOptions.DEFAULT_SIGN_IN)
-                .requestIdToken(getString(R.string.default_web_client_id))
+                .requestIdToken("996817465542-qt39vo4n1u3i2ilrnp0vi36s18h2smvb.apps.googleusercontent.com")
                 .requestEmail()
                 .build();
 
         mGoogleSignInClient = GoogleSignIn.getClient(this, gso);
-        // [END config_signin]
         mGoogleSignInClient.signOut();
-        // [START initialize_auth]
-        // Initialize Firebase Auth
-        mAuth = FirebaseAuth.getInstance();
-        // [END initialize_auth]
-        db = FirebaseFirestore.getInstance();
 
         AlertDialog.Builder builder = new AlertDialog.Builder(this);
-        builder.setCancelable(false); // if you want user to wait for some process to finish,
+        builder.setCancelable(false);
         builder.setView(R.layout.dialog_progress);
         dialog = builder.create();
 
@@ -91,24 +85,22 @@ public class EmailSignupActivity extends Activity{
     public void onActivityResult(int requestCode, int resultCode, Intent data) {
         super.onActivityResult(requestCode, resultCode, data);
 
-        // Result returned from launching the Intent from GoogleSignInApi.getSignInIntent(...);
         if (requestCode == RC_SIGN_IN) {
             Task<GoogleSignInAccount> task = GoogleSignIn.getSignedInAccountFromIntent(data);
             try {
-                // Google Sign In was successful, authenticate with Firebase
                 GoogleSignInAccount account = task.getResult(ApiException.class);
-                dialog.show();
-                handleSignUp(account);
-
+                if (account != null) {
+                    dialog.show();
+                    handleSignUp(account);
+                }
             } catch (ApiException e) {
-                // Google Sign In failed, update UI appropriately
-                Log.w(TAG, "Google sign in failed", e);
+                Log.w(TAG, "Google sign in failed, code: " + e.getStatusCode(), e);
+                Toast.makeText(this, "Lỗi đăng nhập Google: " + e.getStatusCode(), Toast.LENGTH_SHORT).show();
+                finish();
             }
         }
     }
-    // [END onactivityresult]
 
-    // [START auth_with_google]
     private void firebaseAuthWithGoogle(String idToken) {
         AuthCredential credential = GoogleAuthProvider.getCredential(idToken, null);
         mAuth.signInWithCredential(credential)
@@ -116,126 +108,60 @@ public class EmailSignupActivity extends Activity{
                     @Override
                     public void onComplete(@NonNull Task<AuthResult> task) {
                         if (task.isSuccessful()) {
-                            // Sign in success, update UI with the signed-in user's information
                             Log.d(TAG, "signInWithCredential:success");
                             dialog.dismiss();
                             FirebaseUser firebaseUser = mAuth.getCurrentUser();
-                            String id = firebaseUser.getUid();
-                            String username = id.substring(0, Math.min(id.length(), 6));
-                            User user = new User(id, username, "", firebaseUser.getEmail());
-                            writeNewUser(user);
-                            Profile profile = new Profile(id, username);
-                            writeNewProfile(profile);
-
-                            moveToAnotherActivity(HomeScreenActivity.class);
+                            if (firebaseUser != null) {
+                                String id = firebaseUser.getUid();
+                                String username = id.substring(0, Math.min(id.length(), 6));
+                                User user = new User(id, username, "", firebaseUser.getEmail());
+                                writeNewUser(user);
+                                Profile profile = new Profile(id, username);
+                                writeNewProfile(profile);
+                                moveToAnotherActivity(HomeScreenActivity.class);
+                            }
 
                         } else {
                             dialog.dismiss();
-                            // If sign in fails, display a message to the user.
                             Log.w(TAG, "signInWithCredential:failure", task.getException());
+                            Toast.makeText(EmailSignupActivity.this, "Xác thực Firebase thất bại", Toast.LENGTH_SHORT).show();
                             moveToAnotherActivity(SignupChoiceActivity.class);
-
                         }
                     }
                 });
     }
-    // [END auth_with_google]
-    // [START signin]
+
     private void signUp() {
         Intent signInIntent = mGoogleSignInClient.getSignInIntent();
-
         startActivityForResult(signInIntent, RC_SIGN_IN);
     }
-    // [END signin]
 
     private void writeNewUser(User user) {
-
-        // Basic sign-in info:
         Map<String, Object> userValues = user.toMap();
-        Map<String, Object> childUpdates = new HashMap<>();
         db.collection("users").document(user.getUserId())
                 .set(userValues)
-                .addOnSuccessListener(new OnSuccessListener<Void>() {
-                    @Override
-                    public void onSuccess(Void aVoid) {
-                        Log.d(TAG, "DocumentSnapshot successfully written!");
-                    }
-                })
-                .addOnFailureListener(new OnFailureListener() {
-                    @Override
-                    public void onFailure(@NonNull Exception e) {
-                        Log.w(TAG, "Error writing document", e);
-                    }
-                });
-
+                .addOnSuccessListener(aVoid -> Log.d(TAG, "User written!"))
+                .addOnFailureListener(e -> Log.w(TAG, "Error writing user", e));
     }
 
     private void writeNewProfile(Profile profile) {
-
-        // Basic sign-in info:
         Map<String, Object> userValues = profile.toMap();
-        final String TAG = "ADD";
-        Map<String, Object> childUpdates = new HashMap<>();
         db.collection("profiles").document(profile.getUserId())
                 .set(userValues)
-                .addOnSuccessListener(new OnSuccessListener<Void>() {
-                    @Override
-                    public void onSuccess(Void aVoid) {
-                        Log.d(TAG, "DocumentSnapshot successfully written!");
-                    }
-                })
-                .addOnFailureListener(new OnFailureListener() {
-                    @Override
-                    public void onFailure(@NonNull Exception e) {
-                        Log.w(TAG, "Error writing document", e);
-                    }
-                });
-
-
+                .addOnSuccessListener(aVoid -> Log.d(TAG, "Profile written!"))
+                .addOnFailureListener(e -> Log.w(TAG, "Error writing profile", e));
+        
         Map<String, Object> Data1 = new HashMap<>();
         Data1.put("userID","dump");
 
-
-        db.collection("profiles").document(profile.getUserId())
-                .collection("following").document("dump")
-                .set(Data1)
-                .addOnSuccessListener(new OnSuccessListener<Void>() {
-                    @Override
-                    public void onSuccess(Void aVoid) {
-                        Log.d(TAG, "DocumentSnapshot successfully written!");
-                    }
-                })
-                .addOnFailureListener(new OnFailureListener() {
-                    @Override
-                    public void onFailure(@NonNull Exception e) {
-                        Log.w(TAG, "Error writing document", e);
-                    }
-                });
-
-
-        db.collection("profiles").document(profile.getUserId())
-                .collection("followers").document("dump")
-                .set(Data1)
-                .addOnSuccessListener(new OnSuccessListener<Void>() {
-                    @Override
-                    public void onSuccess(Void aVoid) {
-                        Log.d(TAG, "DocumentSnapshot successfully written!");
-                    }
-                })
-                .addOnFailureListener(new OnFailureListener() {
-                    @Override
-                    public void onFailure(@NonNull Exception e) {
-                        Log.w(TAG, "Error writing document", e);
-                    }
-                });
+        db.collection("profiles").document(profile.getUserId()).collection("following").document("dump").set(Data1);
+        db.collection("profiles").document(profile.getUserId()).collection("followers").document("dump").set(Data1);
     }
-
 
     private void moveToAnotherActivity(Class<?> cls) {
         Intent intent = new Intent(EmailSignupActivity.this, cls);
         intent.setFlags(Intent.FLAG_ACTIVITY_CLEAR_TOP);
         startActivity(intent);
-
         finish();
     }
 
@@ -243,25 +169,27 @@ public class EmailSignupActivity extends Activity{
         db.collection("users")
                 .whereEqualTo("email", account.getEmail())
                 .get().addOnCompleteListener(task -> {
-                    msg = "FALSE";
                     if (task.isSuccessful()) {
+                        boolean exists = false;
                         for (DocumentSnapshot document : task.getResult()) {
                             if (document.exists()) {
-                                msg = "TRUE";
+                                exists = true;
                                 break;
                             }
                         }
 
-                    } else {
-                        Log.d("TAG", "Error getting documents: ", task.getException());
-                    }
-
-                    if (msg.equals("FALSE")) {
-                        firebaseAuthWithGoogle(account.getIdToken());
+                        if (!exists) {
+                            firebaseAuthWithGoogle(account.getIdToken());
+                        } else {
+                            dialog.dismiss();
+                            Toast.makeText(EmailSignupActivity.this, "Email này đã được đăng ký, vui lòng Đăng nhập", Toast.LENGTH_LONG).show();
+                            finish();
+                        }
                     } else {
                         dialog.dismiss();
-                        Toast.makeText(EmailSignupActivity.this, getString(R.string.error_existedEmail), Toast.LENGTH_SHORT).show();
-                        moveToAnotherActivity(SignupChoiceActivity.class);
+                        Log.d(TAG, "Error getting documents: ", task.getException());
+                        Toast.makeText(EmailSignupActivity.this, "Lỗi kiểm tra dữ liệu: " + task.getException().getMessage(), Toast.LENGTH_SHORT).show();
+                        firebaseAuthWithGoogle(account.getIdToken());
                     }
                 });
 

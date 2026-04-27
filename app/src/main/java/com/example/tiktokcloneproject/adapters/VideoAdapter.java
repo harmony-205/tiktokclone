@@ -150,26 +150,32 @@ public class VideoAdapter extends RecyclerView.Adapter<VideoAdapter.VideoViewHol
     }
 
     public void pauseVideo(int position) {
-        videoViewHolders.get(position).pauseVideo();
+        if (videoViewHolders != null && position >= 0 && position < videoViewHolders.size()) {
+            videoViewHolders.get(position).pauseVideo();
+        }
     }
 
     public void playVideo(int position) {
-        videoViewHolders.get(position).playVideo();
+        if (videoViewHolders != null && position >= 0 && position < videoViewHolders.size()) {
+            videoViewHolders.get(position).playVideo();
+        }
     }
 
     public void updateWatchCount(int position) {
-        videoViewHolders.get(position).updateWatchCount();
+        if (videoViewHolders != null && position >= 0 && position < videoViewHolders.size()) {
+            videoViewHolders.get(position).updateWatchCount();
+        }
     }
 
     @Override
-    public void onViewAttachedToWindow(VideoViewHolder holder) {
+    public void onViewAttachedToWindow(@NonNull VideoViewHolder holder) {
         holder.playVideo();
         //isPlaying = true;
 
     }
 
     @Override
-    public void onViewDetachedFromWindow(VideoViewHolder holder) {
+    public void onViewDetachedFromWindow(@NonNull VideoViewHolder holder) {
         holder.pauseVideo();
         isPlaying = false;
     }
@@ -238,25 +244,26 @@ public class VideoAdapter extends RecyclerView.Adapter<VideoAdapter.VideoViewHol
         }
 
         public void playVideo() {
-            if (!exoPlayer.isPlaying()) {
-                exoPlayer.play();
-            }
-            if (exoPlayer.getPlaybackState() == Player.STATE_READY
-                || exoPlayer.getPlaybackState() == Player.STATE_IDLE) {
+            if (exoPlayer != null) {
+                if (!exoPlayer.isPlaying()) {
+                    exoPlayer.play();
+                }
+                if (exoPlayer.getPlaybackState() == Player.STATE_READY
+                        || exoPlayer.getPlaybackState() == Player.STATE_IDLE) {
                     exoPlayer.setPlayWhenReady(true);
                 }
-            exoPlayer.play();
+            }
         }
 
         public void pauseVideo() {
-            if (exoPlayer.getPlaybackState() == Player.STATE_READY) {
-                    exoPlayer.setPlayWhenReady(false);
-                }
+            if (exoPlayer != null && exoPlayer.getPlaybackState() == Player.STATE_READY) {
+                exoPlayer.setPlayWhenReady(false);
+            }
         }
 
         public void stopVideo() {
             isPaused = true;
-            if (exoPlayer.getPlaybackState() == Player.STATE_READY) {
+            if (exoPlayer != null && exoPlayer.getPlaybackState() == Player.STATE_READY) {
                 exoPlayer.setPlayWhenReady(false);
                 exoPlayer.stop();
                 exoPlayer.seekTo(0);
@@ -319,11 +326,13 @@ public class VideoAdapter extends RecyclerView.Adapter<VideoAdapter.VideoViewHol
                                 return;
                             }
 
-                            Integer totalLikes = document.get("totalLikes", Integer.class);
-                            Integer totalComments = document.get("totalComments", Integer.class);
-                            Log.d("totalLike", totalLikes + "");
-                            tvFavorites.setText(String.valueOf(totalLikes));
-                            tvComment.setText(String.valueOf(totalComments));
+                            if (document != null && document.exists()) {
+                                Integer totalLikes = document.get("totalLikes", Integer.class);
+                                Integer totalComments = document.get("totalComments", Integer.class);
+                                Log.d("totalLike", totalLikes + "");
+                                tvFavorites.setText(String.valueOf(totalLikes));
+                                tvComment.setText(String.valueOf(totalComments));
+                            }
                         }
                     });
 
@@ -339,9 +348,9 @@ public class VideoAdapter extends RecyclerView.Adapter<VideoAdapter.VideoViewHol
                                 return;
                             }
 
-                            tvTitle.setText("@"+document.get("username", String.class));
-
-
+                            if (document != null && document.exists()) {
+                                tvTitle.setText("@" + document.get("username", String.class));
+                            }
                         }
                     });
             if (userId != authorId) {
@@ -375,7 +384,7 @@ public class VideoAdapter extends RecyclerView.Adapter<VideoAdapter.VideoViewHol
                 return;
             }
             if (view.getId() == imvMore.getId()) {
-                if (authorId.equals(user.getUid())) {
+                if (user != null && authorId.equals(user.getUid())) {
                     Intent intent = new Intent(view.getContext(), DeleteVideoSettingActivity.class);
                     Bundle bundle = new Bundle();
                     bundle.putString("videoId", videoId);
@@ -394,7 +403,7 @@ public class VideoAdapter extends RecyclerView.Adapter<VideoAdapter.VideoViewHol
             }
             if (view.getId() == videoView.getId()) {
                 numberOfClick++;
-                float currentVolume = exoPlayer.getVolume();
+                float currentVolume = (exoPlayer != null) ? exoPlayer.getVolume() : 0f;
                 boolean isMuted = (currentVolume == 0);
                     Handler handler = new Handler();
                     handler.postDelayed(new Runnable() {
@@ -429,17 +438,19 @@ public class VideoAdapter extends RecyclerView.Adapter<VideoAdapter.VideoViewHol
                     }, 500);
                 }
             if (view.getId() == imvVolume.getId()) {
-                float currentVolume = exoPlayer.getVolume();
-                boolean isMuted = (currentVolume == 0);
-                if (isMuted) {
-                    exoPlayer.setVolume(volume);
-                    imvVolume.setImageResource(R.drawable.ic_baseline_volume_up_24);
-                    appearImage(R.drawable.ic_baseline_volume_up_24);
-                } else {
-                    volume = exoPlayer.getVolume();
-                    exoPlayer.setVolume(0);
-                    imvVolume.setImageResource(R.drawable.ic_baseline_volume_off_24);
-                    appearImage(R.drawable.ic_baseline_volume_off_24);
+                if (exoPlayer != null) {
+                    float currentVolume = exoPlayer.getVolume();
+                    boolean isMuted = (currentVolume == 0);
+                    if (isMuted) {
+                        exoPlayer.setVolume(volume);
+                        imvVolume.setImageResource(R.drawable.ic_baseline_volume_up_24);
+                        appearImage(R.drawable.ic_baseline_volume_up_24);
+                    } else {
+                        volume = currentVolume;
+                        exoPlayer.setVolume(0);
+                        imvVolume.setImageResource(R.drawable.ic_baseline_volume_off_24);
+                        appearImage(R.drawable.ic_baseline_volume_off_24);
+                    }
                 }
             }
             if (view.getId() == imvShare.getId()) {
@@ -493,24 +504,26 @@ public class VideoAdapter extends RecyclerView.Adapter<VideoAdapter.VideoViewHol
         }
 
         private void notifyLike(){
-            db.collection("users").document(user.getUid())
-                    .get().addOnCompleteListener(new OnCompleteListener<DocumentSnapshot>() {
-                        @Override
-                        public void onComplete(@NonNull Task<DocumentSnapshot> task) {
-                            if (task.isSuccessful()) {
-                                DocumentSnapshot document = task.getResult();
-                                if (document.exists()) {
-                                    String username = document.get("username", String.class);
-                                    Notification.pushNotification(username, authorId, StaticVariable.LIKE);
-                                    Log.d(ContentValues.TAG, "DocumentSnapshot data: " + document.getData());
+            if (user != null) {
+                db.collection("users").document(user.getUid())
+                        .get().addOnCompleteListener(new OnCompleteListener<DocumentSnapshot>() {
+                            @Override
+                            public void onComplete(@NonNull Task<DocumentSnapshot> task) {
+                                if (task.isSuccessful()) {
+                                    DocumentSnapshot document = task.getResult();
+                                    if (document.exists()) {
+                                        String username = document.get("username", String.class);
+                                        Notification.pushNotification(username, authorId, StaticVariable.LIKE);
+                                        Log.d(ContentValues.TAG, "DocumentSnapshot data: " + document.getData());
+                                    } else {
+                                        Log.d(ContentValues.TAG, "No such document");
+                                    }
                                 } else {
-                                    Log.d(ContentValues.TAG, "No such document");
+                                    Log.d(ContentValues.TAG, "get failed with ", task.getException());
                                 }
-                            } else {
-                                Log.d(ContentValues.TAG, "get failed with ", task.getException());
                             }
-                        }
-                    });
+                        });
+            }
 
 
         }

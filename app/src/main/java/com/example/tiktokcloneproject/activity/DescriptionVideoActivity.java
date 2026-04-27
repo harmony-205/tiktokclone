@@ -46,6 +46,7 @@ import com.google.firebase.storage.OnProgressListener;
 import com.google.firebase.storage.UploadTask;
 
 import java.io.ByteArrayOutputStream;
+import java.io.IOException;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.Map;
@@ -111,22 +112,31 @@ public class DescriptionVideoActivity extends FragmentActivity implements View.O
 
         //get thumbnail video, duration
         MediaMetadataRetriever mmr = new MediaMetadataRetriever();
-        mmr.setDataSource( getApplicationContext(), videoUri );
-        String height = mmr.extractMetadata(MediaMetadataRetriever.METADATA_KEY_VIDEO_HEIGHT);
-        String width = mmr.extractMetadata(MediaMetadataRetriever.METADATA_KEY_VIDEO_WIDTH);
-        String time = mmr.extractMetadata(MediaMetadataRetriever.METADATA_KEY_DURATION);
-        long timeInMillisec = Long.parseLong(time );
-        //time is microseconds
-        thumbnail = mmr.getScaledFrameAtTime( 1000000, MediaMetadataRetriever.OPTION_NEXT_SYNC, 1000, 1000 );
+        try {
+            mmr.setDataSource(getApplicationContext(), videoUri);
+            String height = mmr.extractMetadata(MediaMetadataRetriever.METADATA_KEY_VIDEO_HEIGHT);
+            String width = mmr.extractMetadata(MediaMetadataRetriever.METADATA_KEY_VIDEO_WIDTH);
+            String time = mmr.extractMetadata(MediaMetadataRetriever.METADATA_KEY_DURATION);
+            long timeInMillisec = Long.parseLong(time);
+            //time is microseconds
+            thumbnail = mmr.getScaledFrameAtTime(1000000, MediaMetadataRetriever.OPTION_NEXT_SYNC, 1000, 1000);
 
-        mmr.release();
-        Log.i("Info", "Resolution"  + height + "x" + width + ". Time: " + timeInMillisec / 1000);
-        if(!validator.isNumeric(height) || !validator.isNumeric(width)) {
-            Toast.makeText(getApplicationContext(), getString(R.string.error_undefined), Toast.LENGTH_SHORT).show();
-            moveToAnotherActivity(CameraActivity.class);
-        } else if(timeInMillisec > maximumDuration) {
-            Toast.makeText(getApplicationContext(), getString(R.string.error_upload_video), Toast.LENGTH_SHORT).show();
-            moveToAnotherActivity(CameraActivity.class);
+            Log.i("Info", "Resolution" + height + "x" + width + ". Time: " + timeInMillisec / 1000);
+            if (!validator.isNumeric(height) || !validator.isNumeric(width)) {
+                Toast.makeText(getApplicationContext(), getString(R.string.error_undefined), Toast.LENGTH_SHORT).show();
+                moveToAnotherActivity(CameraActivity.class);
+            } else if (timeInMillisec > maximumDuration) {
+                Toast.makeText(getApplicationContext(), getString(R.string.error_upload_video), Toast.LENGTH_SHORT).show();
+                moveToAnotherActivity(CameraActivity.class);
+            }
+        } catch (Exception e) {
+            Log.e(TAG, "Error retrieving video metadata", e);
+        } finally {
+            try {
+                mmr.release();
+            } catch (IOException e) {
+                Log.e(TAG, "Error releasing MediaMetadataRetriever", e);
+            }
         }
 
         imvShortCutVideo.setImageBitmap(thumbnail);

@@ -65,5 +65,7 @@
     </string>
     <string name="error_birthdate">Birhdate is invalid or under 16 years old</string>
     <string name="exist_username">This username has existed</string>
-    <!--   //////////////////////////////////////////////////////////   -->
+
+    <!-- HÃY DÁN MÃ WEB CLIENT ID THẬT CỦA BẠN VÀO ĐÂY -->
+    <string name="default_web_client_id" translatable="false">996817465542-qt39vo4n1u3i2ilrnp0vi36s18h2smvb.apps.googleusercontent.com</string>
 </resources>

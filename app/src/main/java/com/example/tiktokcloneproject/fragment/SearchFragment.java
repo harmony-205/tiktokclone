@@ -64,7 +64,6 @@ public class SearchFragment extends Fragment implements View.OnClickListener {
     RecyclerView rcvVideoSummary;
     Handler handler = new Handler();
 
-    ImageButton imbBackToHome;
     TextView tvSubmitSearch;
 
     ArrayList <User> userArrayList=new ArrayList<User>();;
@@ -122,54 +121,41 @@ public class SearchFragment extends Fragment implements View.OnClickListener {
         rcvVideoSummary.addItemDecoration(new SearchFragment.GridSpacingItemDecoration(3, 10, true));
         rcvVideoSummary.setAdapter(videoSummaryAdapter);
 
-        imbBackToHome.setOnClickListener(this);
-        tvSubmitSearch.setOnClickListener(this);
+        if (tvSubmitSearch != null) {
+            tvSubmitSearch.setOnClickListener(this);
+        }
 
         searchView = (SearchView) layout.findViewById(R.id.searchView);
-        searchView.setOnQueryTextListener(new SearchView.OnQueryTextListener() {
-            @Override
-            public boolean onQueryTextSubmit(String query) {
-//                userAdapter.getFilter().filter(query);
+        if (searchView != null) {
+            searchView.setOnQueryTextListener(new SearchView.OnQueryTextListener() {
+                @Override
+                public boolean onQueryTextSubmit(String query) {
+                    return false;
+                }
 
-//                userArrayList.clear();
-//                if(query.startsWith("#"))
-//                {
-//                    setVideoSummaries(query);
-//                }
-//                else {
-//                    getData(query);
-//                    userAdapter.notifyDataSetChanged();
-//                }
-
-                return false;
-            }
-
-            @Override
-            public boolean onQueryTextChange(String newText) {
-//                Toast.makeText(SearchActivity.this,newText,
-//                        Toast.LENGTH_LONG).show();
-//                userAdapter.getFilter().filter(newText);
-//                userArrayList.clear();
-                if(!newText.isEmpty()) {
-                    if(newText.startsWith("#"))
-                    {
-                        setVideoSummaries(newText);
+                @Override
+                public boolean onQueryTextChange(String newText) {
+                    if(!newText.isEmpty()) {
+                        if(newText.startsWith("#"))
+                        {
+                            setVideoSummaries(newText);
+                        }
+                        else {
+                            getData(newText);
+                        }
                     }
                     else {
-                        getData(newText);
+                        userArrayList.clear();
+                        userAdapter.notifyDataSetChanged();
+                        videoSummaries.clear();
+                        videoSummaryAdapter.notifyDataSetChanged();
                     }
-                }
-                else {
-                    userArrayList.clear();
-                    userAdapter.notifyDataSetChanged();
-                    videoSummaries.clear();
-                    videoSummaryAdapter.notifyDataSetChanged();
-                }
 
 
-                return false;
-            }
-        });
+                    return false;
+                }
+            });
+        }
         return layout;
     }
 
@@ -223,12 +209,7 @@ public class SearchFragment extends Fragment implements View.OnClickListener {
 
     @Override
     public void onClick(View view) {
-        if(view.getId() == imbBackToHome.getId()) {
-            Intent intent = new Intent(context, HomeScreenActivity.class);
-            intent.setFlags(Intent.FLAG_ACTIVITY_CLEAR_TOP);
-            startActivity(intent);
-        }
-        if(view.getId() == tvSubmitSearch.getId()) {
+        if(tvSubmitSearch != null && view.getId() == tvSubmitSearch.getId()) {
             searchView.clearFocus();
         }
     }

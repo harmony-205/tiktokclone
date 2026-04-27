@@ -116,13 +116,15 @@ public class CameraActivity extends Activity implements View.OnClickListener {
 
     static int sensorToDeviceToRotation(CameraCharacteristics c, int deviceOrientation) {
         if (deviceOrientation == android.view.OrientationEventListener.ORIENTATION_UNKNOWN) return 0;
-        int sensorOrientation = c.get(CameraCharacteristics.SENSOR_ORIENTATION);
+        Integer sensorOrientation = c.get(CameraCharacteristics.SENSOR_ORIENTATION);
+        if (sensorOrientation == null) sensorOrientation = 0;
 
         // Round device orientation to a multiple of 90
         deviceOrientation = (deviceOrientation + 45) / 90 * 90;
 
         // Reverse device orientation for front-facing cameras
-        boolean facingFront = c.get(CameraCharacteristics.LENS_FACING) == CameraCharacteristics.LENS_FACING_FRONT;
+        Integer lensFacing = c.get(CameraCharacteristics.LENS_FACING);
+        boolean facingFront = lensFacing != null && lensFacing == CameraCharacteristics.LENS_FACING_FRONT;
         if (facingFront) deviceOrientation = -deviceOrientation;
 
         // Calculate desired JPEG orientation relative to camera orientation to make
@@ -140,7 +142,7 @@ public class CameraActivity extends Activity implements View.OnClickListener {
                 try {
                     createVideoFileName();
                 } catch (IOException e) {
-                    e.printStackTrace();
+                    Log.e("CameraActivity", "Error creating video file", e);
                 }
                 startRecord();
                 mediaRecorder.start();
@@ -151,11 +153,15 @@ public class CameraActivity extends Activity implements View.OnClickListener {
         @Override
         public void onDisconnected(@NonNull CameraDevice cameraDevice) {
             Toast.makeText(getApplicationContext(), "on disconnect?", Toast.LENGTH_SHORT).show();
+            cameraDevice.close();
+            mainCamera = null;
         }
 
         @Override
         public void onError(@NonNull CameraDevice cameraDevice, int i) {
             Toast.makeText(getApplicationContext(), "error" + i, Toast.LENGTH_SHORT).show();
+            cameraDevice.close();
+            mainCamera = null;
         }
     };
 
@@ -176,7 +182,11 @@ public class CameraActivity extends Activity implements View.OnClickListener {
         db = FirebaseFirestore.getInstance();
         mAuth = FirebaseAuth.getInstance();
         user = mAuth.getCurrentUser();
-        userId = user.getUid();
+        if (user != null) {
+            userId = user.getUid();
+        } else {
+            userId = "anonymous";
+        }
 
         btnUploadVideo = findViewById(R.id.btnUploadVideo);
         btnUploadVideo.setOnClickListener(this);
@@ -213,7 +223,7 @@ public class CameraActivity extends Activity implements View.OnClickListener {
         int currentWidth = cameraFrameLayout.getWidth();
         float ratio = (float)cameraImageSize.getWidth()/cameraImageSize.getHeight();
         int newHeight = Math.round((float)currentWidth*ratio);
-        int newWidth = Math.round(currentWidth);
+        int newWidth = currentWidth;
         cameraFrameLayout.setLayoutParams(new FrameLayout.LayoutParams(newWidth, newHeight));
 
     }
@@ -225,17 +235,19 @@ public class CameraActivity extends Activity implements View.OnClickListener {
                 ActivityCompat.requestPermissions(this,
                         new String[]{Manifest.permission.CAMERA, Manifest.permission.RECORD_AUDIO},
                         1);
+                return;
             }
-            if (ActivityCompat.checkSelfPermission(this, Manifest.permission.WRITE_EXTERNAL_STORAGE)
+            if (Build.VERSION.SDK_INT < Build.VERSION_CODES.Q && ActivityCompat.checkSelfPermission(this, Manifest.permission.WRITE_EXTERNAL_STORAGE)
                     != PackageManager.PERMISSION_GRANTED) {
                 Toast.makeText(getApplicationContext(), "please grant permission!", Toast.LENGTH_SHORT).show();
                 ActivityCompat.requestPermissions(this,
                         new String[]{Manifest.permission.WRITE_EXTERNAL_STORAGE},
                         1);
+                return;
             }
             manager.openCamera(defaultId, cameraDeviceCallback, backgroundHandler);
         } catch(Exception e) {
-            Log.i("EXCEPTION: ", e.toString());
+            Log.e("CameraActivity", "Error connecting camera", e);
         }
     }
 
@@ -256,7 +268,7 @@ public class CameraActivity extends Activity implements View.OnClickListener {
         if (view.getId() == btnUploadVideo.getId()) {
             //            progressDialog = new ProgressDialog(MainActivity.this);
 
-            if (ActivityCompat.checkSelfPermission(this, Manifest.permission.ACCESS_MEDIA_LOCATION) != PackageManager.PERMISSION_GRANTED) {
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q && ActivityCompat.checkSelfPermission(this, Manifest.permission.ACCESS_MEDIA_LOCATION) != PackageManager.PERMISSION_GRANTED) {
                 Toast.makeText(getApplicationContext(), "please grant permission!", Toast.LENGTH_SHORT).show();
                 ActivityCompat.requestPermissions(this,
                         new String[]{Manifest.permission.ACCESS_MEDIA_LOCATION},
@@ -282,7 +294,7 @@ public class CameraActivity extends Activity implements View.OnClickListener {
             try {
                 videoFileHolder = createVideoFileName();
             } catch (IOException e) {
-                e.printStackTrace();
+                Log.e("CameraActivity", "Error creating video file", e);
             }
             startRecord();
             mediaRecorder.start();
@@ -355,14 +367,15 @@ public class CameraActivity extends Activity implements View.OnClickListener {
             // Find front and back cameras
             for (String id : cameraList) {
                 CameraCharacteristics characteristics = manager.getCameraCharacteristics(id);
-                if (characteristics.get(CameraCharacteristics.LENS_FACING) == CameraCharacteristics.LENS_FACING_FRONT) {
+                Integer facing = characteristics.get(CameraCharacteristics.LENS_FACING);
+                if (facing != null && facing == CameraCharacteristics.LENS_FACING_FRONT) {
                     frontId = id;
                     if (!isFront) {
                         continue;
                     }
                     defaultId = frontId;
                 }
-                if (characteristics.get(CameraCharacteristics.LENS_FACING) == CameraCharacteristics.LENS_FACING_BACK) {
+                if (facing != null && facing == CameraCharacteristics.LENS_FACING_BACK) {
                     backId = id;
                     if (isFront) {
                         continue;
@@ -381,20 +394,21 @@ public class CameraActivity extends Activity implements View.OnClickListener {
                     rotateHeight = width;
                 }
                 try {
-                    StreamConfigurationMap map = manager.getCameraCharacteristics(defaultId).
-                            get(CameraCharacteristics.SCALER_STREAM_CONFIGURATION_MAP);
-                    Log.i("DIMENSION:", rotateWidth + "," + rotateHeight);
-                    previewSize = chooseOptimalSize(map.getOutputSizes(SurfaceTexture.class), rotateWidth, rotateHeight);
-                    videoSize = chooseOptimalSize(map.getOutputSizes(SurfaceTexture.class), rotateWidth, rotateHeight);
-                    setTextureViewSize(previewSize);
-                } catch (CameraAccessException e) {
-
+                    StreamConfigurationMap map = characteristics.get(CameraCharacteristics.SCALER_STREAM_CONFIGURATION_MAP);
+                    if (map != null) {
+                        Log.i("DIMENSION:", rotateWidth + "," + rotateHeight);
+                        previewSize = chooseOptimalSize(map.getOutputSizes(SurfaceTexture.class), rotateWidth, rotateHeight);
+                        videoSize = chooseOptimalSize(map.getOutputSizes(MediaRecorder.class), rotateWidth, rotateHeight);
+                        setTextureViewSize(previewSize);
+                    }
+                } catch (Exception e) {
+                    Log.e("CameraActivity", "Error getting preview size", e);
                 }
                 break;
             }
 
         } catch (Exception exception) {
-            exception.printStackTrace();
+            Log.e("CameraActivity", "Error getting camera IDs", exception);
         }
     }
 
@@ -406,22 +420,22 @@ public class CameraActivity extends Activity implements View.OnClickListener {
     }
 
     private void stopBackgroundThread() {
-        backgroundHandlerThread.quitSafely();
-        try {
-            backgroundHandlerThread.join();
-            backgroundHandlerThread = null;
-            backgroundHandler = null;
-        } catch(Exception exception) {
-            Log.i("EXCEPTION: ", exception.toString());
+        if (backgroundHandlerThread != null) {
+            backgroundHandlerThread.quitSafely();
+            try {
+                backgroundHandlerThread.join();
+                backgroundHandlerThread = null;
+                backgroundHandler = null;
+            } catch(Exception exception) {
+                Log.e("CameraActivity", "Error stopping background thread", exception);
+            }
         }
-
-
     }
 
     private static class CompareSizeByArea implements Comparator<Size> {
         @Override
         public int compare(Size lhs, Size rhs) {
-            return Long.signum((long) lhs.getHeight() * lhs.getHeight() / (long)rhs.getHeight() * rhs.getHeight());
+            return Long.signum((long) lhs.getWidth() * lhs.getHeight() - (long)rhs.getWidth() * rhs.getHeight());
         }
     }
 
@@ -438,7 +452,7 @@ public class CameraActivity extends Activity implements View.OnClickListener {
                 bigEnough.add(s);
             }
         }
-        if (bigEnough.size() > 0) {
+        if (!bigEnough.isEmpty()) {
             return Collections.min(bigEnough, new CompareSizeByArea());
         }
         Log.i("GETSIZE default", "size added: " + choices[0].getWidth() + "," + choices[0].getHeight());
@@ -449,65 +463,69 @@ public class CameraActivity extends Activity implements View.OnClickListener {
         try {
             setupMediaRecorder();
             SurfaceTexture surfaceTexture = textureFront.getSurfaceTexture();
-            surfaceTexture.setDefaultBufferSize(videoSize.getWidth(), videoSize.getHeight());
-            Surface previewSurface = new Surface(surfaceTexture);
-            Surface recordSurface = mediaRecorder.getSurface();
-            try {
-                captureRequestBuilder = mainCamera.createCaptureRequest(CameraDevice.TEMPLATE_RECORD);
-                captureRequestBuilder.addTarget(previewSurface);
-                captureRequestBuilder.addTarget(recordSurface);
-                mainCamera.createCaptureSession(Arrays.asList(previewSurface, recordSurface),
-                        new CameraCaptureSession.StateCallback() {
-                            @Override
-                            public void onConfigured(@NonNull CameraCaptureSession cameraCaptureSession) {
-                                try {
-                                    cameraCaptureSession.setRepeatingRequest(captureRequestBuilder.build(), null, null);
-                                } catch (CameraAccessException e) {
-                                    e.printStackTrace();
+            if (surfaceTexture != null) {
+                surfaceTexture.setDefaultBufferSize(videoSize.getWidth(), videoSize.getHeight());
+                Surface previewSurface = new Surface(surfaceTexture);
+                Surface recordSurface = mediaRecorder.getSurface();
+                try {
+                    captureRequestBuilder = mainCamera.createCaptureRequest(CameraDevice.TEMPLATE_RECORD);
+                    captureRequestBuilder.addTarget(previewSurface);
+                    captureRequestBuilder.addTarget(recordSurface);
+                    mainCamera.createCaptureSession(Arrays.asList(previewSurface, recordSurface),
+                            new CameraCaptureSession.StateCallback() {
+                                @Override
+                                public void onConfigured(@NonNull CameraCaptureSession cameraCaptureSession) {
+                                    try {
+                                        cameraCaptureSession.setRepeatingRequest(captureRequestBuilder.build(), null, null);
+                                    } catch (CameraAccessException e) {
+                                        Log.e("CameraActivity", "Error setting repeating request", e);
+                                    }
                                 }
-                            }
 
-                            @Override
-                            public void onConfigureFailed(@NonNull CameraCaptureSession cameraCaptureSession) {
-
-                            }
-                        }, null);
-            } catch (CameraAccessException e) {
-                e.printStackTrace();
+                                @Override
+                                public void onConfigureFailed(@NonNull CameraCaptureSession cameraCaptureSession) {
+                                    Toast.makeText(getApplicationContext(), "Configuration failed", Toast.LENGTH_SHORT).show();
+                                }
+                            }, null);
+                } catch (CameraAccessException e) {
+                    Log.e("CameraActivity", "Error creating capture request", e);
+                }
             }
 
         } catch (IOException e) {
-            e.printStackTrace();
+            Log.e("CameraActivity", "Error starting record", e);
         }
 
     }
 
     private void startCameraPreview() {
         SurfaceTexture surfaceTexture = textureFront.getSurfaceTexture();
-        surfaceTexture.setDefaultBufferSize(previewSize.getWidth(), previewSize.getHeight());
-        Surface previewSurface = new Surface(surfaceTexture);
+        if (surfaceTexture != null) {
+            surfaceTexture.setDefaultBufferSize(previewSize.getWidth(), previewSize.getHeight());
+            Surface previewSurface = new Surface(surfaceTexture);
 
-        try {
-            captureRequestBuilder = mainCamera.createCaptureRequest(CameraDevice.TEMPLATE_PREVIEW);
-            captureRequestBuilder.addTarget(previewSurface);
+            try {
+                captureRequestBuilder = mainCamera.createCaptureRequest(CameraDevice.TEMPLATE_PREVIEW);
+                captureRequestBuilder.addTarget(previewSurface);
 
-            mainCamera.createCaptureSession(Collections.singletonList(previewSurface), new CameraCaptureSession.StateCallback() {
-                @Override
-                public void onConfigured(@NonNull CameraCaptureSession cameraCaptureSession) {
-                    try {
-                        cameraCaptureSession.setRepeatingRequest(captureRequestBuilder.build(), null, backgroundHandler);
-                    } catch (CameraAccessException e) {
-                        e.printStackTrace();
+                mainCamera.createCaptureSession(Collections.singletonList(previewSurface), new CameraCaptureSession.StateCallback() {
+                    @Override
+                    public void onConfigured(@NonNull CameraCaptureSession cameraCaptureSession) {
+                        try {
+                            cameraCaptureSession.setRepeatingRequest(captureRequestBuilder.build(), null, backgroundHandler);
+                        } catch (CameraAccessException e) {
+                            Log.e("CameraActivity", "Error setting repeating request", e);
+                        }
                     }
-                }
 
-                @Override
-                public void onConfigureFailed(@NonNull CameraCaptureSession cameraCaptureSession) {
-
-                }
-            }, null);
-        } catch (CameraAccessException e) {
-            e.printStackTrace();
+                    @Override
+                    public void onConfigureFailed(@NonNull CameraCaptureSession cameraCaptureSession) {
+                        Toast.makeText(getApplicationContext(), "Configuration failed", Toast.LENGTH_SHORT).show();
+                    }
+                }, null);
+            } catch (CameraAccessException e) {
+                Log.e("CameraActivity", "Error creating capture request", e);
+            }
         }
     }
 
@@ -515,7 +533,10 @@ public class CameraActivity extends Activity implements View.OnClickListener {
         File movieFile = Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_MOVIES);
         videoFolder = new File(movieFile, "TopTopVideos");
         if (!videoFolder.exists()) {
-            videoFolder.mkdirs();
+            boolean success = videoFolder.mkdirs();
+            if (!success) {
+                Log.e("CameraActivity", "Failed to create video folder");
+            }
         }
     }
 
@@ -537,10 +558,10 @@ public class CameraActivity extends Activity implements View.OnClickListener {
         mediaRecorder.setVideoSize(videoSize.getWidth(), videoSize.getHeight());
         mediaRecorder.setVideoFrameRate(30);
         mediaRecorder.setVideoEncodingBitRate(3000000);
-        if (defaultId == frontId) {
+        if (Objects.equals(defaultId, frontId)) {
             mediaRecorder.setOrientationHint(totalRotation);
         } else {
-        mediaRecorder.setOrientationHint((totalRotation + 180) % 360);
+            mediaRecorder.setOrientationHint((totalRotation + 180) % 360);
         }
         mediaRecorder.prepare();
     }

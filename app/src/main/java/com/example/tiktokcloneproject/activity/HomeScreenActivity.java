@@ -51,14 +51,13 @@ public class HomeScreenActivity extends FragmentActivity implements View.OnClick
         ft = getSupportFragmentManager().beginTransaction();
 
 
-        if (fragmentIntent.getExtras() != null) {
+        if (fragmentIntent != null && fragmentIntent.getExtras() != null) {
             if (fragmentIntent.hasExtra("id")) {
                 openAppFromLink = true;
             }
             if (fragmentIntent.hasExtra("fragment_inbox")) {
                 inboxFragment = InboxFragment.newInstance("inbox");
                 ft.add(R.id.main_fragment, inboxFragment);
-
             } else  if (fragmentIntent.hasExtra("fragment_profile")) {
                 profileFragment = ProfileFragment.newInstance("profile", "");
                 ft.add(R.id.main_fragment, profileFragment);
@@ -76,27 +75,28 @@ public class HomeScreenActivity extends FragmentActivity implements View.OnClick
         ft.commit();
 
         btnHome = (Button)findViewById(R.id.btnHome);
-      //  btnFriend = (Button) findViewById(R.id.btnFriend);
         btnAddVideo = (Button)findViewById(R.id.btnAddVideo);
         btnInbox = (Button)findViewById(R.id.btnInbox);
         btnProfile = (Button) findViewById(R.id.btnProfile);
-
         btnSearch=(Button) findViewById(R.id.btnSearch);
-        btnSearch.setOnClickListener(this);
+
+        if (btnHome != null) btnHome.setOnClickListener(this);
+        if (btnAddVideo != null) btnAddVideo.setOnClickListener(this);
+        if (btnInbox != null) btnInbox.setOnClickListener(this);
+        if (btnProfile != null) btnProfile.setOnClickListener(this);
+        if (btnSearch != null) btnSearch.setOnClickListener(this);
 
         user = FirebaseAuth.getInstance().getCurrentUser();
         db = FirebaseFirestore.getInstance();
 
-    }//on Create
+    }
 
     @Override public void onStart() {
         super.onStart();
-//        loadVideos();
     }
 
     @Override
     public void onBackPressed() {
-
         if (pressedTime + 2000 > System.currentTimeMillis()) {
             super.onBackPressed();
             finish();
@@ -113,22 +113,8 @@ public class HomeScreenActivity extends FragmentActivity implements View.OnClick
     }
 
     @Override
-    protected void onResume() {
-        super.onResume();
-    }
-
-    @Override
     public void onClick(View view) {
-//        if (view.getId() == btnProfile.getId()) {
-//            ft = getSupportFragmentManager().beginTransaction();
-//            profileFragment = ProfileFragment.newInstance("profile", "");
-//            ft.replace(R.id.main_fragment, profileFragment);
-//            ft.commit();
-//            return;
-//        }
-
-        if (view.getId() == btnSearch.getId())
-        {
+        if (btnSearch != null && view.getId() == btnSearch.getId()) {
             ft = getSupportFragmentManager().beginTransaction();
             if (searchFragment == null)  {
                 searchFragment = SearchFragment.newInstance("search");
@@ -137,23 +123,21 @@ public class HomeScreenActivity extends FragmentActivity implements View.OnClick
             showFragments(1);
             ft.commit();
         }
-        if(view.getId() == btnProfile.getId()) {
+        if(btnProfile != null && view.getId() == btnProfile.getId()) {
             handleProfileClick();
         }
-        if(view.getId() == btnAddVideo.getId()) {
+        if(btnAddVideo != null && view.getId() == btnAddVideo.getId()) {
             handleAddClick();
         }
-        if(view.getId() == btnHome.getId()) {
+        if(btnHome != null && view.getId() == btnHome.getId()) {
             handleHomeClick();
         }
-        if(view.getId() == btnInbox.getId()) {
+        if(btnInbox != null && view.getId() == btnInbox.getId()) {
             handleInboxClick();
         }
-
-    }//on click
+    }
 
     private void handleProfileClick() {
-
         if(user == null) {
             Intent intent = new Intent(this, SignupChoiceActivity.class);
             startActivity(intent);
@@ -176,6 +160,7 @@ public class HomeScreenActivity extends FragmentActivity implements View.OnClick
     }
 
     private void handleAddClick() {
+        user = FirebaseAuth.getInstance().getCurrentUser();
         if(user == null) {
             showNiceDialogBox(this, null, null);
             return;
@@ -186,6 +171,7 @@ public class HomeScreenActivity extends FragmentActivity implements View.OnClick
     }
 
     private void handleInboxClick() {
+        user = FirebaseAuth.getInstance().getCurrentUser();
         if(user == null) {
             showNiceDialogBox(this, null, null);
             return;
@@ -201,22 +187,13 @@ public class HomeScreenActivity extends FragmentActivity implements View.OnClick
     }
 
     private void handleHomeClick() {
-//        if(getSupportFragmentManager().findFragmentById(R.id.main_fragment) instanceof VideoFragment) {
-//            Intent intent = new Intent(context, HomeScreenActivity.class);
-//            intent.setFlags(Intent.FLAG_ACTIVITY_CLEAR_TOP);
-//            startActivity(intent);
-//            return;
-//        }
-//        Intent intent = new Intent(context, HomeScreenActivity.class);
-//        startActivity(intent);
         ft = getSupportFragmentManager().beginTransaction();
         if (videoFragment == null) {
-            inboxFragment = InboxFragment.newInstance("video");
+            videoFragment = VideoFragment.newInstance("fragment_video");
             ft.add(R.id.main_fragment, videoFragment);
         }
         showFragments(0);
         ft.commit();
-//            intent.setFlags(Intent.FLAG_ACTIVITY_CLEAR_TOP);
     }
 
     private void showNiceDialogBox(Context context, @Nullable String title, @Nullable String message) {
@@ -227,103 +204,64 @@ public class HomeScreenActivity extends FragmentActivity implements View.OnClick
             message = getString(R.string.request_account_message);
         }
         try {
-            //CAUTION: sometimes TITLE and DESCRIPTION include HTML markers
             AlertDialog.Builder myBuilder = new AlertDialog.Builder(context, R.style.AlertDialogTheme);
             myBuilder.setIcon(R.drawable.splash_background)
                     .setTitle(title)
                     .setMessage(message)
-                    .setNegativeButton("Cancel", new DialogInterface.OnClickListener() {
-                        @Override
-                        public void onClick(DialogInterface dialogInterface, int i) {
-                            if(context instanceof HomeScreenActivity) {
-                                return;
-                            }
-                            Intent intent = new Intent(context, HomeScreenActivity.class);
-                            intent.setFlags(Intent.FLAG_ACTIVITY_CLEAR_TOP);
-                            startActivity(intent);
+                    .setNegativeButton("Cancel", (dialogInterface, i) -> {
+                        if(context instanceof HomeScreenActivity) {
+                            return;
                         }
+                        Intent intent = new Intent(context, HomeScreenActivity.class);
+                        intent.setFlags(Intent.FLAG_ACTIVITY_CLEAR_TOP);
+                        startActivity(intent);
                     })
-                    .setPositiveButton("Sign up/Sign in", new DialogInterface.OnClickListener()
-                    {
-                        public void onClick(DialogInterface dialog, int whichOne) {
-                            Intent intent = new Intent(context, MainActivity.class);
-                            intent.setFlags(Intent.FLAG_ACTIVITY_CLEAR_TOP);
-                            startActivity(intent);
-                        }}) //setNegativeButton
+                    .setPositiveButton("Sign up/Sign in", (dialog, whichOne) -> {
+                        Intent intent = new Intent(context, MainActivity.class);
+                        intent.setFlags(Intent.FLAG_ACTIVITY_CLEAR_TOP);
+                        startActivity(intent);
+                    })
                     .show();
         }
         catch (Exception e) { Log.e("Error DialogBox", e.getMessage() ); }
     }
 
-    private void showFragments(int position) { // search, inbox, profile
-        if (position == 0) {
-            if (!videoFragment.isVisible()) {
-                ft.show(videoFragment);
-                continueVideoFragment();
-            }
+    private void showFragments(int position) {
+        if (position == 0 && videoFragment != null) {
+            ft.show(videoFragment);
+            continueVideoFragment();
+        } else if (position == 1 && searchFragment != null) {
+            ft.show(searchFragment);
+        } else if (position == 2 && inboxFragment != null) {
+            ft.show(inboxFragment);
+        } else if (position == 3 && profileFragment != null) {
+            ft.show(profileFragment);
         }
 
-        if (position == 1) {
-            if (!searchFragment.isVisible()) {
-                ft.show(searchFragment);
-            }
+        if (videoFragment != null && position != 0 && videoFragment.isVisible()) {
+            ft.hide(videoFragment);
+            stopVideoFragment();
         }
-
-        if (position == 2) {
-            if (!inboxFragment.isVisible()) {
-                ft.show(inboxFragment);
-            }
+        if (searchFragment != null && position != 1 && searchFragment.isVisible()) {
+            ft.hide(searchFragment);
         }
-
-        if (position == 3) {
-            if (!profileFragment.isVisible()) {
-                ft.show(profileFragment);
-            }
+        if (inboxFragment != null && position != 2 && inboxFragment.isVisible()) {
+            ft.hide(inboxFragment);
         }
-
-        if (videoFragment != null && position != 0) {
-            if (videoFragment.isVisible()) {
-                ft.hide(videoFragment);
-                stopVideoFragment();
-            }
+        if (profileFragment != null && position != 3 && profileFragment.isVisible()) {
+            ft.hide(profileFragment);
         }
-
-        if (searchFragment != null && position != 1) {
-            if (searchFragment.isVisible()) {
-                ft.hide(searchFragment);
-            }
-        }
-
-        if (inboxFragment != null && position != 2) {
-            if (inboxFragment.isVisible()) {
-                ft.hide(inboxFragment);
-            }
-        }
-
-        if (profileFragment != null && position != 3) {
-            if (profileFragment.isVisible()) {
-                ft.hide(profileFragment);
-            }
-        }
-
     }
+
     public void stopVideoFragment() {
-        if (videoFragment != null) {
-                videoFragment.pauseVideo();
+        if (videoFragment != null && videoFragment.isAdded()) {
+            videoFragment.pauseVideo();
         }
     }
 
     public void continueVideoFragment() {
-        if (videoFragment != null) {
-                videoFragment.continueVideo();
-        } else {
-            ft = getSupportFragmentManager().beginTransaction();
-            videoFragment = VideoFragment.newInstance("fragment_video");
-            ft.add(R.id.main_fragment, videoFragment);
-            ft.commit();
+        if (videoFragment != null && videoFragment.isAdded()) {
+            videoFragment.continueVideo();
         }
     }
-
-
-
-}// activity
+}

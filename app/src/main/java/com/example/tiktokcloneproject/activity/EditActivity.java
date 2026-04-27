@@ -1,7 +1,6 @@
 package com.example.tiktokcloneproject.activity;
 
 import androidx.annotation.NonNull;
-import androidx.appcompat.app.AppCompatActivity;
 
 import android.app.Activity;
 import android.app.DatePickerDialog;
@@ -13,7 +12,6 @@ import android.text.Editable;
 import android.text.TextWatcher;
 import android.util.Log;
 import android.view.View;
-import android.widget.AbsListView;
 import android.widget.Button;
 import android.widget.DatePicker;
 import android.widget.ImageButton;
@@ -71,8 +69,10 @@ public class EditActivity extends Activity implements View.OnClickListener {
 
         Intent intent = getIntent();
         Bundle bundle = intent.getExtras();
-        mode = bundle.getString("mode");
-        content = bundle.getString("content");
+        if (bundle != null) {
+            mode = bundle.getString("mode");
+            content = bundle.getString("content");
+        }
 
         validator = Validator.getInstance();
         db = FirebaseFirestore.getInstance();
@@ -86,48 +86,22 @@ public class EditActivity extends Activity implements View.OnClickListener {
             case StaticVariable.BIRTHDATE:
                 handleBirthdate();
                 break;
-
         }
 
         imbBack.setOnClickListener(this);
-        if(!btnSave.hasOnClickListeners())
-        {
-            btnSave.setOnClickListener(this);
-        }
-    }// on create
+    }
 
     @Override
     public void onClick(View view) {
-
         if(view.getId() == imbBack.getId()) {
-            Intent intent = new Intent(EditActivity.this, EditProfileActivity.class);
-            startActivity(intent);
-            finish();
+            backToEditProfile();
         }
 
         if(view.getId() == btnSave.getId()) {
-            DocumentReference userDoc = db.collection("users").document(user.getUid());
-
-            setEnableSave(false);
-            userDoc.update(mode, edtInput.getText().toString())
-                    .addOnSuccessListener(new OnSuccessListener<Void>() {
-                        @Override
-                        public void onSuccess(Void aVoid) {
-                            Log.d(TAG, "DocumentSnapshot successfully updated!");
-                            setEnableSave(false);
-                        }
-
-
-                    })
-                    .addOnFailureListener(new OnFailureListener() {
-                        @Override
-                        public void onFailure(@NonNull Exception e) {
-                            Log.w(TAG, "Error updating document", e);
-                        }
-                    });
+            if (mode.equals(StaticVariable.BIRTHDATE)) {
+                updateBirthdate();
+            }
         }
-
-
     }
 
     private void handleUsername() {
@@ -151,7 +125,7 @@ public class EditActivity extends Activity implements View.OnClickListener {
                 }
                 else {
                     layoutInput.setError("");
-                    if(content.equals(editable.toString())) {
+                    if(content != null && content.equals(editable.toString())) {
                         setEnableSave(false);
                     } else {
                         setEnableSave(true);
@@ -163,29 +137,35 @@ public class EditActivity extends Activity implements View.OnClickListener {
         btnSave.setOnClickListener(new View.OnClickListener() {
             @Override
             public void onClick(View view) {
+                String newUsername = edtInput.getText().toString();
+                if (content != null && content.equals(newUsername)) {
+                    backToEditProfile();
+                    return;
+                }
+
+                setEnableSave(false);
                 db.collection("users")
-                        .whereEqualTo("username", edtInput.getText().toString())
+                        .whereEqualTo("username", newUsername)
                         .get()
                         .addOnCompleteListener(task -> {
-                            msg = "FALSE";
                             if (task.isSuccessful()) {
+                                boolean exists = false;
                                 for (DocumentSnapshot document : task.getResult()) {
                                     if (document.exists()) {
-                                        msg = "TRUE";
+                                        exists = true;
                                         break;
                                     }
                                 }
 
+                                if (!exists) {
+                                    updateUsername();
+                                } else {
+                                    setEnableSave(true);
+                                    layoutInput.setError(getString(R.string.exist_username));
+                                }
                             } else {
+                                setEnableSave(true);
                                 Log.d(TAG, "Error getting documents: ", task.getException());
-                            }
-
-                            if (msg.equals("FALSE")) {
-                                setEnableSave(false);
-                                handler.post(EditActivity.this::updateUsername);
-                            } else {
-                                setEnableSave(false);
-                                layoutInput.setError(getString(R.string.exist_username));
                             }
                         });
             }
@@ -233,7 +213,7 @@ public class EditActivity extends Activity implements View.OnClickListener {
                 }
                 else {
                     layoutInput.setError("");
-                    if(content.equals(editable.toString())) {
+                    if(content != null && content.equals(editable.toString())) {
                         setEnableSave(false);
                     } else {
                         setEnableSave(true);
@@ -241,8 +221,14 @@ public class EditActivity extends Activity implements View.OnClickListener {
                 }
             }
         });
-    }
 
+        btnSave.setOnClickListener(new View.OnClickListener() {
+            @Override
+            public void onClick(View view) {
+                updateBirthdate();
+            }
+        });
+    }
 
     private void setEnableSave(boolean value) {
         if(value) {
@@ -256,36 +242,46 @@ public class EditActivity extends Activity implements View.OnClickListener {
 
     private void updateUsername() {
         String username = edtInput.getText().toString();
+        if (user == null) return;
 
         DocumentReference userDoc = db.collection("users").document(user.getUid());
         DocumentReference profileDoc = db.collection("profiles").document(user.getUid());
 
         userDoc.update("username", username)
-                .addOnSuccessListener(new OnSuccessListener<Void>() {
-                    @Override
-                    public void onSuccess(Void aVoid) {
-                        Log.d(TAG, "DocumentSnapshot successfully updated!");
-                    }
+                .addOnSuccessListener(aVoid -> {
+                    profileDoc.update("username", username)
+                            .addOnSuccessListener(aVoid1 -> {
+                                Toast.makeText(EditActivity.this, "Username updated", Toast.LENGTH_SHORT).show();
+                                backToEditProfile();
+                            });
                 })
-                .addOnFailureListener(new OnFailureListener() {
-                    @Override
-                    public void onFailure(@NonNull Exception e) {
-                        Log.w(TAG, "Error updating document", e);
-                    }
+                .addOnFailureListener(e -> {
+                    setEnableSave(true);
+                    Toast.makeText(EditActivity.this, "Update failed", Toast.LENGTH_SHORT).show();
                 });
-        profileDoc.update("username", username)
-                .addOnSuccessListener(new OnSuccessListener<Void>() {
-                    @Override
-                    public void onSuccess(Void aVoid) {
-                        Log.d(TAG, "DocumentSnapshot successfully updated!");
-                    }
+    }
+
+    private void updateBirthdate() {
+        String birthdate = edtInput.getText().toString();
+        if (user == null) return;
+
+        setEnableSave(false);
+        db.collection("users").document(user.getUid())
+                .update("birthdate", birthdate)
+                .addOnSuccessListener(aVoid -> {
+                    Toast.makeText(EditActivity.this, "Birthdate updated", Toast.LENGTH_SHORT).show();
+                    backToEditProfile();
                 })
-                .addOnFailureListener(new OnFailureListener() {
-                    @Override
-                    public void onFailure(@NonNull Exception e) {
-                        Log.w(TAG, "Error updating document", e);
-                    }
+                .addOnFailureListener(e -> {
+                    setEnableSave(true);
+                    Toast.makeText(EditActivity.this, "Update failed", Toast.LENGTH_SHORT).show();
                 });
+    }
+
+    private void backToEditProfile() {
+        Intent intent = new Intent(EditActivity.this, EditProfileActivity.class);
+        startActivity(intent);
+        finish();
     }
 
     private void updateLabel()
@@ -294,5 +290,4 @@ public class EditActivity extends Activity implements View.OnClickListener {
         SimpleDateFormat dateFormat=new SimpleDateFormat(myFormat, Locale.US);
         edtInput.setText(dateFormat.format(myCalendar.getTime()));
     }
-
-}//class
+}
