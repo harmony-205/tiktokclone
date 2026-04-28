@@ -10,6 +10,7 @@ import java.util.concurrent.atomic.AtomicInteger;
 public class Video {
     private String videoId, videoUri, authorId, description, username;
     private int totalLikes, totalComments;
+    private long watchCount;
 
     public Video() {
     }
@@ -21,9 +22,10 @@ public class Video {
         this.username = username;
         this.description = description;
         totalLikes = totalComments = 0;
+        watchCount = 0;
     }
 
-    public Video(String videoId, String videoUri, String authorId, String description, String username, int totalLikes, int totalComments) {
+    public Video(String videoId, String videoUri, String authorId, String description, String username, int totalLikes, int totalComments, long watchCount) {
         this.videoId = videoId;
         this.videoUri = videoUri;
         this.authorId = authorId;
@@ -31,6 +33,7 @@ public class Video {
         this.username = username;
         this.totalLikes = totalLikes;
         this.totalComments = totalComments;
+        this.watchCount = watchCount;
     }
 
     public String getUsername() {
@@ -64,6 +67,13 @@ public class Video {
         return totalComments;
     }
 
+    public long getWatchCount() {
+        return watchCount;
+    }
+
+    public void setWatchCount(long watchCount) {
+        this.watchCount = watchCount;
+    }
 
     public Map<String, Object> toMap() {
         HashMap<String, Object> result = new HashMap<>();
@@ -74,6 +84,7 @@ public class Video {
         result.put("description", description);
         result.put("totalComments", totalComments);
         result.put("totalLikes", totalLikes);
+        result.put("watchCount", watchCount);
 
         return result;
     }

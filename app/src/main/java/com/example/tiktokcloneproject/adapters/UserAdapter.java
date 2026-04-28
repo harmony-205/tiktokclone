@@ -26,46 +26,33 @@ public class UserAdapter extends RecyclerView.Adapter<UserAdapter.userItems> imp
     private List<User> listUserOld;
     private Context mainContext;
 
-
-
-
-    public UserAdapter(Context context,List<User> listUser)
-    {
-        mainContext =context;
-        this.listUser=listUser;
-        this.listUserOld=listUser;
+    public UserAdapter(Context context, List<User> listUser) {
+        this.mainContext = context;
+        this.listUser = listUser;
+        this.listUserOld = listUser;
     }
-
-
 
     @NonNull
     @Override
     public userItems onCreateViewHolder(@NonNull ViewGroup parent, int viewType) {
         mainContext = parent.getContext();
-        View view = LayoutInflater.from(parent.getContext()).inflate(R.layout.item_user,parent,false);
+        View view = LayoutInflater.from(parent.getContext()).inflate(R.layout.item_user, parent, false);
         return new userItems(view);
     }
 
     @Override
     public void onBindViewHolder(@NonNull userItems holder, int position) {
-        User user= listUser.get(position);
-        if (user ==null) {
+        User user = listUser.get(position);
+        if (user == null) {
             return;
         }
         holder.text_Username.setText(user.getUserName());
         holder.layout_items.setOnClickListener(new View.OnClickListener() {
             @Override
             public void onClick(View view) {
-//                Bundle bundle = new Bundle();
-//                bundle.putString("id", user.getUserId());
-//                Intent intent = new Intent(mainContext, ProfileActivity.class);
-//                intent.putExtras(bundle);
-//                mainContext.startActivity(intent);
-//                Toast.makeText(view.getContext(), user.getUserName(),
-//                        Toast.LENGTH_LONG).show();
-                Intent intent=new Intent(mainContext, ProfileActivity.class);
+                Intent intent = new Intent(mainContext, ProfileActivity.class);
                 Bundle bundle = new Bundle();
-                bundle.putString("id",user.getUserId());
+                bundle.putString("id", user.getUserId());
                 intent.putExtras(bundle);
                 mainContext.startActivity(intent);
             }
@@ -74,29 +61,21 @@ public class UserAdapter extends RecyclerView.Adapter<UserAdapter.userItems> imp
 
     @Override
     public int getItemCount() {
-        if (listUser != null)
-        { return listUser.size();
-        }
-        return 0;
+        return listUser != null ? listUser.size() : 0;
     }
 
-
-
-    public class userItems extends RecyclerView.ViewHolder{
+    public class userItems extends RecyclerView.ViewHolder {
         private TextView text_Username;
         private LinearLayout layout_items;
 
-
         public userItems(@NonNull View itemView) {
             super(itemView);
-            text_Username=(TextView) itemView.findViewById(R.id.text_Username);
-            layout_items=(LinearLayout) itemView.findViewById(R.id.layout_items);
-
+            text_Username = itemView.findViewById(R.id.text_Username);
+            layout_items = itemView.findViewById(R.id.layout_items);
         }
     }
 
-    public void release()
-    {
+    public void release() {
         mainContext = null;
     }
 
@@ -105,31 +84,28 @@ public class UserAdapter extends RecyclerView.Adapter<UserAdapter.userItems> imp
         return new Filter() {
             @Override
             protected FilterResults performFiltering(CharSequence charSequence) {
-                String srtSearch=charSequence.toString();
+                String srtSearch = charSequence.toString();
                 if (srtSearch.isEmpty()) {
-                    listUser=listUserOld;
-
-                }
-                else {
-                    List<User> list=new ArrayList<>();
-                    for (User user : listUserOld){
-                        if (user.getUserName().toLowerCase().contains(srtSearch.toLowerCase())){
+                    listUser = listUserOld;
+                } else {
+                    List<User> list = new ArrayList<>();
+                    for (User user : listUserOld) {
+                        if (user.getUserName().toLowerCase().contains(srtSearch.toLowerCase())) {
                             list.add(user);
                         }
                     }
-                    listUser=list;
-
+                    listUser = list;
                 }
 
-                FilterResults filterResults=new FilterResults();
-                filterResults.values=listUser;
-
+                FilterResults filterResults = new FilterResults();
+                filterResults.values = listUser;
                 return filterResults;
             }
 
             @Override
+            @SuppressWarnings("unchecked")
             protected void publishResults(CharSequence charSequence, FilterResults filterResults) {
-                listUser= (List<User>) filterResults.values;
+                listUser = (List<User>) filterResults.values;
                 notifyDataSetChanged();
             }
         };
