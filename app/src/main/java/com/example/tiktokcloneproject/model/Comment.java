@@ -26,29 +26,56 @@ public class Comment {
         return commentId;
     }
 
+    public void setCommentId(String commentId) {
+        this.commentId = commentId;
+    }
+
     public String getVideoId() {
         return videoId;
+    }
+
+    public void setVideoId(String videoId) {
+        this.videoId = videoId;
     }
 
     public String getAuthorId() {
         return authorId;
     }
 
+    public void setAuthorId(String authorId) {
+        this.authorId = authorId;
+    }
 
     public String getContent() {
         return content;
+    }
+
+    public void setContent(String content) {
+        this.content = content;
     }
 
     public int getTotalLikes() {
         return totalLikes;
     }
 
+    public void setTotalLikes(int totalLikes) {
+        this.totalLikes = totalLikes;
+    }
+
     public int getTotalReplies() {
         return totalReplies;
     }
 
+    public void setTotalReplies(int totalReplies) {
+        this.totalReplies = totalReplies;
+    }
+
     public ArrayList<String> getReplyIds() {
         return replyIds;
+    }
+
+    public void setReplyIds(ArrayList<String> replyIds) {
+        this.replyIds = replyIds;
     }
 
     public Map<String, Object> toMap() {

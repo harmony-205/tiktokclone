@@ -75,6 +75,20 @@ public class VideoAdapter extends RecyclerView.Adapter<VideoAdapter.VideoViewHol
     }
 
     @Override
+    public void onBindViewHolder(@NonNull VideoViewHolder holder, int position, @NonNull List<Object> payloads) {
+        if (!payloads.isEmpty()) {
+            Video video = videos.get(position);
+            for (Object payload : payloads) {
+                if (payload.equals("UPDATE_COUNTS")) {
+                    holder.updateCounts(video);
+                }
+            }
+        } else {
+            super.onBindViewHolder(holder, position, payloads);
+        }
+    }
+
+    @Override
     public int getItemCount() {
         return videos.size();
     }
@@ -132,6 +146,7 @@ public class VideoAdapter extends RecyclerView.Adapter<VideoAdapter.VideoViewHol
         TextView tvTitle, txvDescription, tvCommentCount, tvLikeCount;
         FirebaseFirestore db;
         boolean isLiked = false;
+        String currentUri = "";
 
         public VideoViewHolder(@NonNull View itemView) {
             super(itemView);
@@ -159,6 +174,11 @@ public class VideoAdapter extends RecyclerView.Adapter<VideoAdapter.VideoViewHol
             videoView.setOnTouchListener(new OnSwipeTouchListener(itemView.getContext()) {
                 @Override public void onSwipeLeft() {}
             });
+        }
+
+        public void updateCounts(Video video) {
+            tvCommentCount.setText(String.valueOf(video.getTotalComments()));
+            tvLikeCount.setText(String.valueOf(video.getTotalLikes()));
         }
 
         public void playVideo() {
@@ -189,6 +209,7 @@ public class VideoAdapter extends RecyclerView.Adapter<VideoAdapter.VideoViewHol
                 exoPlayer.stop();
                 exoPlayer.release();
                 exoPlayer = null;
+                currentUri = "";
             }
         }
 
@@ -196,15 +217,20 @@ public class VideoAdapter extends RecyclerView.Adapter<VideoAdapter.VideoViewHol
         public void setVideoObjects(Video video) {
             tvTitle.setText("@" + video.getUsername());
             txvDescription.setText(video.getDescription());
-            tvCommentCount.setText(String.valueOf(video.getTotalComments()));
-            tvLikeCount.setText(String.valueOf(video.getTotalLikes()));
+            updateCounts(video);
 
             checkLikeStatus(video);
 
             imvLike.setOnClickListener(v -> handleLikeClick(video));
             imvComment.setOnClickListener(v -> openComments(video));
 
+            // Chỉ khởi tạo lại player nếu URI khác hoặc player chưa có
+            if (exoPlayer != null && currentUri.equals(video.getVideoUri())) {
+                return;
+            }
+
             releasePlayer();
+            currentUri = video.getVideoUri();
 
             View surfaceView = videoView.getVideoSurfaceView();
             if (surfaceView instanceof TextureView) {

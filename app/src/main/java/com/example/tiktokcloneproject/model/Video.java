@@ -1,11 +1,7 @@
 package com.example.tiktokcloneproject.model;
 
-import org.checkerframework.checker.units.qual.A;
-
-import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.Map;
-import java.util.concurrent.atomic.AtomicInteger;
 
 public class Video {
     private String videoId, videoUri, authorId, description, username;
@@ -21,8 +17,9 @@ public class Video {
         this.authorId = authorId;
         this.username = username;
         this.description = description;
-        totalLikes = totalComments = 0;
-        watchCount = 0;
+        this.totalLikes = 0;
+        this.totalComments = 0;
+        this.watchCount = 0;
     }
 
     public Video(String videoId, String videoUri, String authorId, String description, String username, int totalLikes, int totalComments, long watchCount) {
@@ -40,31 +37,56 @@ public class Video {
         return username;
     }
 
+    public void setUsername(String username) {
+        this.username = username;
+    }
 
     public String getVideoId() {
         return videoId;
+    }
+
+    public void setVideoId(String videoId) {
+        this.videoId = videoId;
     }
 
     public String getVideoUri() {
         return videoUri;
     }
 
+    public void setVideoUri(String videoUri) {
+        this.videoUri = videoUri;
+    }
+
     public String getAuthorId() {
         return authorId;
+    }
+
+    public void setAuthorId(String authorId) {
+        this.authorId = authorId;
     }
 
     public String getDescription() {
         return description;
     }
 
+    public void setDescription(String description) {
+        this.description = description;
+    }
+
     public int getTotalLikes() {
         return totalLikes;
     }
 
-    public void setTotalLikes(int totalLikes) { this.totalLikes = totalLikes; }
+    public void setTotalLikes(int totalLikes) {
+        this.totalLikes = totalLikes;
+    }
 
     public int getTotalComments() {
         return totalComments;
+    }
+
+    public void setTotalComments(int totalComments) {
+        this.totalComments = totalComments;
     }
 
     public long getWatchCount() {
@@ -85,7 +107,6 @@ public class Video {
         result.put("totalComments", totalComments);
         result.put("totalLikes", totalLikes);
         result.put("watchCount", watchCount);
-
         return result;
     }
 }

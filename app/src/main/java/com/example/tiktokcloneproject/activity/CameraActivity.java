@@ -16,7 +16,6 @@ import android.hardware.camera2.params.StreamConfigurationMap;
 import android.media.MediaRecorder;
 import android.media.MediaScannerConnection;
 import android.net.Uri;
-import android.os.Build;
 import android.os.Bundle;
 import android.os.Environment;
 import android.os.Handler;
@@ -35,7 +34,6 @@ import android.widget.ImageButton;
 import android.widget.Toast;
 
 import androidx.annotation.NonNull;
-import androidx.annotation.Nullable;
 import androidx.core.app.ActivityCompat;
 import androidx.core.content.ContextCompat;
 
@@ -47,19 +45,17 @@ import com.google.firebase.firestore.FirebaseFirestore;
 import java.io.File;
 import java.io.IOException;
 import java.text.SimpleDateFormat;
-import java.util.ArrayList;
 import java.util.Arrays;
-import java.util.Collections;
-import java.util.Comparator;
 import java.util.Date;
-import java.util.List;
 import java.util.Objects;
 
 public class CameraActivity extends Activity implements View.OnClickListener {
+    private static final String TAG = "CameraActivity";
+    private static final int REQUEST_PERMISSIONS = 101;
+    
     private CameraManager manager;
     private FrameLayout cameraFrameLayout;
     private TextureView textureFront;
-    private boolean isPermissionRequested = false;
 
     private TextureView.SurfaceTextureListener textureListener = new TextureView.SurfaceTextureListener() {
         @Override
@@ -97,22 +93,27 @@ public class CameraActivity extends Activity implements View.OnClickListener {
     }
 
     private CameraDevice mainCamera;
+    private CameraCaptureSession cameraCaptureSession;
     private CaptureRequest.Builder captureRequestBuilder;
+    
     private CameraDevice.StateCallback cameraDeviceCallback = new CameraDevice.StateCallback() {
         @Override
         public void onOpened(@NonNull CameraDevice cameraDevice) {
             mainCamera = cameraDevice;
-            startCameraPreview();
+            try {
+                setupMediaRecorder();
+                startCameraSession();
+            } catch (IOException e) {
+                Log.e(TAG, "MediaRecorder setup failed", e);
+            }
         }
         @Override
         public void onDisconnected(@NonNull CameraDevice cameraDevice) {
-            cameraDevice.close();
-            mainCamera = null;
+            closeCamera();
         }
         @Override
         public void onError(@NonNull CameraDevice cameraDevice, int i) {
-            cameraDevice.close();
-            mainCamera = null;
+            closeCamera();
         }
     };
 
@@ -125,7 +126,6 @@ public class CameraActivity extends Activity implements View.OnClickListener {
         setContentView(R.layout.activity_camera);
 
         createVideoFolder();
-        mediaRecorder = new MediaRecorder();
         db = FirebaseFirestore.getInstance();
         mAuth = FirebaseAuth.getInstance();
         user = mAuth.getCurrentUser();
@@ -146,6 +146,10 @@ public class CameraActivity extends Activity implements View.OnClickListener {
         cameraFrameLayout = findViewById(R.id.camera_frame);
         textureFront = findViewById(R.id.texture_view_front);
         animRotate = AnimationUtils.loadAnimation(this, R.anim.rotate);
+        
+        if (!hasPermissions()) {
+            requestPermissions();
+        }
     }
 
     @Override
@@ -161,13 +165,9 @@ public class CameraActivity extends Activity implements View.OnClickListener {
 
     private void setupCamera(int width, int height) {
         if (width <= 0 || height <= 0) return;
-        
         if (hasPermissions()) {
             getCameraIds();
             connectCamera();
-        } else if (!isPermissionRequested) {
-            isPermissionRequested = true;
-            ActivityCompat.requestPermissions(this, new String[]{Manifest.permission.CAMERA, Manifest.permission.RECORD_AUDIO}, 101);
         }
     }
 
@@ -176,25 +176,51 @@ public class CameraActivity extends Activity implements View.OnClickListener {
                ContextCompat.checkSelfPermission(this, Manifest.permission.RECORD_AUDIO) == PackageManager.PERMISSION_GRANTED;
     }
 
+    private void requestPermissions() {
+        ActivityCompat.requestPermissions(this, 
+                new String[]{Manifest.permission.CAMERA, Manifest.permission.RECORD_AUDIO}, 
+                REQUEST_PERMISSIONS);
+    }
+
     @SuppressLint("MissingPermission")
     private void connectCamera() {
-        if (!hasPermissions() || defaultId == null) return;
+        if (!hasPermissions() || defaultId == null || mainCamera != null) return;
         manager = (CameraManager) getSystemService(CAMERA_SERVICE);
         try {
             manager.openCamera(defaultId, cameraDeviceCallback, backgroundHandler);
         } catch (CameraAccessException e) {
-            Log.e("CameraActivity", "Cannot access camera", e);
+            Log.e(TAG, "Cannot access camera", e);
+        }
+    }
+
+    private void closeCamera() {
+        if (cameraCaptureSession != null) {
+            cameraCaptureSession.close();
+            cameraCaptureSession = null;
+        }
+        if (mainCamera != null) {
+            mainCamera.close();
+            mainCamera = null;
         }
     }
 
     @Override
     public void onRequestPermissionsResult(int requestCode, @NonNull String[] permissions, @NonNull int[] grantResults) {
-        if (requestCode == 101) {
-            isPermissionRequested = false;
-            if (grantResults.length > 0 && grantResults[0] == PackageManager.PERMISSION_GRANTED) {
+        if (requestCode == REQUEST_PERMISSIONS) {
+            boolean allGranted = true;
+            for (int result : grantResults) {
+                if (result != PackageManager.PERMISSION_GRANTED) {
+                    allGranted = false;
+                    break;
+                }
+            }
+            if (allGranted) {
                 if (textureFront.isAvailable()) {
                     setupCamera(textureFront.getWidth(), textureFront.getHeight());
                 }
+            } else {
+                Toast.makeText(this, "Quyền Camera và Micro là bắt buộc", Toast.LENGTH_SHORT).show();
+                finish();
             }
         }
     }
@@ -204,51 +230,69 @@ public class CameraActivity extends Activity implements View.OnClickListener {
         if (view.getId() == R.id.imb_flip_camera) {
             flipCamera();
         } else if (view.getId() == R.id.button_record) {
-            startRecordingProcess();
+            startRecording();
         } else if (view.getId() == R.id.button_stop) {
-            stopRecordingProcess();
+            stopRecording();
         } else if (view.getId() == R.id.button_close) {
             finish();
         }
     }
 
     private void flipCamera() {
-        if (mainCamera != null) {
-            mainCamera.close();
-            mainCamera = null;
-        }
+        closeCamera();
         btnFlip.startAnimation(animRotate);
         defaultId = Objects.equals(defaultId, frontId) ? backId : frontId;
         connectCamera();
     }
 
-    private void startRecordingProcess() {
-        btnStopRecording.setVisibility(View.VISIBLE);
-        btnFlip.setVisibility(View.GONE);
-        btnStartRecording.setVisibility(View.GONE);
-        isRecording = true;
+    private void startRecording() {
+        if (isRecording || mediaRecorder == null || cameraCaptureSession == null) return;
+        
         try {
-            videoFileHolder = createVideoFileName();
-            startRecord();
+            // Kích hoạt Target Record để hình ảnh bắt đầu đổ vào MediaRecorder
+            Surface recordSurface = mediaRecorder.getSurface();
+            captureRequestBuilder.addTarget(recordSurface);
+            cameraCaptureSession.setRepeatingRequest(captureRequestBuilder.build(), null, backgroundHandler);
+            
             mediaRecorder.start();
-        } catch (IOException e) {
-            Log.e("CameraActivity", "Record failed", e);
+            isRecording = true;
+            btnStopRecording.setVisibility(View.VISIBLE);
+            btnFlip.setVisibility(View.GONE);
+            btnStartRecording.setVisibility(View.GONE);
+        } catch (Exception e) {
+            Log.e(TAG, "mediaRecorder.start() failed", e);
+            isRecording = false;
         }
     }
 
-    private void stopRecordingProcess() {
+    private void stopRecording() {
         if (isRecording) {
+            boolean success = true;
             try {
+                // Ngừng gửi dữ liệu vào Record Surface
+                Surface recordSurface = mediaRecorder.getSurface();
+                captureRequestBuilder.removeTarget(recordSurface);
+                if (cameraCaptureSession != null) {
+                    cameraCaptureSession.setRepeatingRequest(captureRequestBuilder.build(), null, backgroundHandler);
+                }
+                
                 mediaRecorder.stop();
             } catch (Exception e) {
-                Log.e("CameraActivity", "Stop fail", e);
+                Log.e(TAG, "Stop fail", e);
+                success = false;
             }
+            
             mediaRecorder.reset();
             isRecording = false;
-            MediaScannerConnection.scanFile(this, new String[]{videoFileHolder.getAbsolutePath()}, null, (path, uri) -> {
-                // Sử dụng uri trả về từ MediaScanner thay vì Uri.fromFile(new File(path))
-                runOnUiThread(() -> startUploadingActivity(uri != null ? uri : Uri.fromFile(new File(path))));
-            });
+
+            if (success) {
+                MediaScannerConnection.scanFile(this, new String[]{videoFileName}, null, (path, uri) -> {
+                    runOnUiThread(() -> startUploadingActivity(uri != null ? uri : Uri.fromFile(new File(path))));
+                });
+            } else {
+                Toast.makeText(this, "Quay video thất bại, hãy thử lại!", Toast.LENGTH_SHORT).show();
+                finish();
+            }
         }
     }
 
@@ -270,7 +314,7 @@ public class CameraActivity extends Activity implements View.OnClickListener {
                 runOnUiThread(() -> setTextureViewSize(previewSize));
             }
         } catch (CameraAccessException e) {
-            Log.e("CameraActivity", "Setup error", e);
+            Log.e(TAG, "Setup error", e);
         }
     }
 
@@ -284,67 +328,50 @@ public class CameraActivity extends Activity implements View.OnClickListener {
         });
     }
 
-    private void startCameraPreview() {
+    private void startCameraSession() {
         SurfaceTexture st = textureFront.getSurfaceTexture();
-        if (st == null || mainCamera == null) return;
+        if (st == null || mainCamera == null || mediaRecorder == null) return;
+        
         st.setDefaultBufferSize(previewSize.getWidth(), previewSize.getHeight());
         Surface previewSurface = new Surface(st);
+        Surface recordSurface = mediaRecorder.getSurface();
+
         try {
-            CaptureRequest.Builder builder = mainCamera.createCaptureRequest(CameraDevice.TEMPLATE_PREVIEW);
-            builder.addTarget(previewSurface);
-            mainCamera.createCaptureSession(Collections.singletonList(previewSurface), new CameraCaptureSession.StateCallback() {
+            captureRequestBuilder = mainCamera.createCaptureRequest(CameraDevice.TEMPLATE_RECORD);
+            captureRequestBuilder.addTarget(previewSurface);
+
+            mainCamera.createCaptureSession(Arrays.asList(previewSurface, recordSurface), new CameraCaptureSession.StateCallback() {
                 @Override
                 public void onConfigured(@NonNull CameraCaptureSession session) {
+                    cameraCaptureSession = session;
                     try {
-                        session.setRepeatingRequest(builder.build(), null, backgroundHandler);
+                        session.setRepeatingRequest(captureRequestBuilder.build(), null, backgroundHandler);
                     } catch (CameraAccessException e) {
-                        Log.e("CameraActivity", "Session fail", e);
+                        Log.e(TAG, "Session repeating request fail", e);
                     }
                 }
                 @Override
-                public void onConfigureFailed(@NonNull CameraCaptureSession session) {}
+                public void onConfigureFailed(@NonNull CameraCaptureSession session) {
+                    Log.e(TAG, "Configuration failed");
+                }
             }, backgroundHandler);
         } catch (CameraAccessException e) {
-            Log.e("CameraActivity", "Preview error", e);
+            Log.e(TAG, "Capture session error", e);
         }
-    }
-
-    private void startBackgroundThread() {
-        backgroundHandlerThread = new HandlerThread("CameraThread");
-        backgroundHandlerThread.start();
-        backgroundHandler = new Handler(backgroundHandlerThread.getLooper());
-    }
-
-    private void stopBackgroundThread() {
-        if (backgroundHandlerThread != null) {
-            backgroundHandlerThread.quitSafely();
-            try {
-                backgroundHandlerThread.join();
-                backgroundHandlerThread = null;
-                backgroundHandler = null;
-            } catch (InterruptedException e) {
-                Log.e("CameraActivity", "Thread stop failed", e);
-            }
-        }
-    }
-
-    private void createVideoFolder() {
-        File folder = new File(Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_MOVIES), "TopTopVideos");
-        if (!folder.exists()) folder.mkdirs();
-        videoFolder = folder.getAbsolutePath();
-    }
-
-    private File createVideoFileName() throws IOException {
-        String ts = new SimpleDateFormat("yyyyMMdd_HHmmss").format(new Date());
-        File file = File.createTempFile(userId + "_" + ts, ".mp4", new File(videoFolder));
-        videoFileName = file.getAbsolutePath();
-        return file;
     }
 
     private void setupMediaRecorder() throws IOException {
+        if (mediaRecorder == null) mediaRecorder = new MediaRecorder();
+        else mediaRecorder.reset();
+
         mediaRecorder.setAudioSource(MediaRecorder.AudioSource.MIC);
         mediaRecorder.setVideoSource(MediaRecorder.VideoSource.SURFACE);
         mediaRecorder.setOutputFormat(MediaRecorder.OutputFormat.MPEG_4);
+        
+        String ts = new SimpleDateFormat("yyyyMMdd_HHmmss").format(new Date());
+        videoFileHolder = File.createTempFile(userId + "_" + ts, ".mp4", new File(videoFolder));
+        videoFileName = videoFileHolder.getAbsolutePath();
+        
         mediaRecorder.setOutputFile(videoFileName);
         mediaRecorder.setVideoEncodingBitRate(10000000);
         mediaRecorder.setVideoFrameRate(30);
@@ -356,31 +383,31 @@ public class CameraActivity extends Activity implements View.OnClickListener {
         mediaRecorder.prepare();
     }
 
-    private void startRecord() {
-        try {
-            setupMediaRecorder();
-            SurfaceTexture st = textureFront.getSurfaceTexture();
-            st.setDefaultBufferSize(videoSize.getWidth(), videoSize.getHeight());
-            Surface previewSurface = new Surface(st);
-            Surface recordSurface = mediaRecorder.getSurface();
-            captureRequestBuilder = mainCamera.createCaptureRequest(CameraDevice.TEMPLATE_RECORD);
-            captureRequestBuilder.addTarget(previewSurface);
-            captureRequestBuilder.addTarget(recordSurface);
-            mainCamera.createCaptureSession(Arrays.asList(previewSurface, recordSurface), new CameraCaptureSession.StateCallback() {
-                @Override
-                public void onConfigured(@NonNull CameraCaptureSession session) {
-                    try {
-                        session.setRepeatingRequest(captureRequestBuilder.build(), null, backgroundHandler);
-                    } catch (CameraAccessException e) {
-                        Log.e("CameraActivity", "Session fail", e);
-                    }
-                }
-                @Override
-                public void onConfigureFailed(@NonNull CameraCaptureSession session) {}
-            }, backgroundHandler);
-        } catch (Exception e) {
-            Log.e("CameraActivity", "Record fail", e);
+    private void startBackgroundThread() {
+        if (backgroundHandlerThread == null) {
+            backgroundHandlerThread = new HandlerThread("CameraThread");
+            backgroundHandlerThread.start();
+            backgroundHandler = new Handler(backgroundHandlerThread.getLooper());
         }
+    }
+
+    private void stopBackgroundThread() {
+        if (backgroundHandlerThread != null) {
+            backgroundHandlerThread.quitSafely();
+            try {
+                backgroundHandlerThread.join();
+                backgroundHandlerThread = null;
+                backgroundHandler = null;
+            } catch (InterruptedException e) {
+                Log.e(TAG, "Thread stop failed", e);
+            }
+        }
+    }
+
+    private void createVideoFolder() {
+        File folder = new File(Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_MOVIES), "TopTopVideos");
+        if (!folder.exists()) folder.mkdirs();
+        videoFolder = folder.getAbsolutePath();
     }
 
     private void startUploadingActivity(Uri videoUri) {
@@ -393,10 +420,16 @@ public class CameraActivity extends Activity implements View.OnClickListener {
     @Override
     protected void onPause() {
         super.onPause();
+        closeCamera();
         stopBackgroundThread();
-        if (mainCamera != null) {
-            mainCamera.close();
-            mainCamera = null;
+    }
+
+    @Override
+    protected void onDestroy() {
+        super.onDestroy();
+        if (mediaRecorder != null) {
+            mediaRecorder.release();
+            mediaRecorder = null;
         }
     }
 }

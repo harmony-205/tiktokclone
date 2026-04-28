@@ -14,7 +14,7 @@ public class Notification {
     public Notification(String fromUser, String action) {
         this.fromUsername = fromUser;
         this.action = action;
-        timestamp = System.currentTimeMillis();
+        this.timestamp = System.currentTimeMillis();
     }
 
     public String getFromUsername() {
@@ -30,6 +30,8 @@ public class Notification {
     }
 
     public static void pushNotification(String fromUsername, String toUserId, String action) {
+        if (toUserId == null || fromUsername == null) return;
+
         FirebaseDatabase.getInstance()
                         .getReference()
                         .child(toUserId)
