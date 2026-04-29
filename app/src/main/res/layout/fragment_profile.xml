@@ -27,12 +27,16 @@
             android:textSize="20sp"></TextView>
     </LinearLayout>
 
-    <de.hdodenhof.circleimageview.CircleImageView
+    <!-- Dùng ImageView chuẩn để Glide nạp ảnh ổn định 100% -->
+    <ImageView
         android:id="@+id/imvAvatarProfile"
         android:layout_width="100dp"
         android:layout_height="100dp"
         android:layout_gravity="center"
-        android:clickable="true"></de.hdodenhof.circleimageview.CircleImageView>
+        android:src="@drawable/default_avatar"
+        android:scaleType="centerCrop"
+        android:clickable="true" />
+
     <TextView
         android:id="@+id/txv_username"
         android:layout_width="wrap_content"

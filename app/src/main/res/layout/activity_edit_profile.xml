@@ -7,6 +7,7 @@
     android:gravity="top"
     android:id="@+id/llEditProfile"
     android:orientation="vertical"
+    android:background="@color/white"
     tools:context=".activity.EditProfileActivity">
 
     <ImageView
@@ -15,6 +16,7 @@
         android:layout_height="wrap_content"
         android:src="@drawable/ic_back"
         android:layout_margin="5dp"
+        app:tint="@color/tiktok_red"
         />
 
     <ScrollView
@@ -25,27 +27,108 @@
             android:layout_height="match_parent"
             android:layout_margin="20dp"
             android:orientation="vertical">
-            <LinearLayout
+
+            <RelativeLayout
                 android:id="@+id/llChangePhoto"
-                android:layout_width="match_parent"
+                android:layout_width="120dp"
+                android:layout_height="120dp"
+                android:layout_gravity="center_horizontal"
+                android:layout_marginBottom="20dp">
+
+                <de.hdodenhof.circleimageview.CircleImageView
+                    android:id="@+id/imbPhoto"
+                    android:layout_width="match_parent"
+                    android:layout_height="match_parent"
+                    android:src="@drawable/default_avatar"
+                    app:civ_border_width="0dp" />
+
+                <View
+                    android:layout_width="match_parent"
+                    android:layout_height="match_parent"
+                    android:background="@drawable/btn_rounded_shape"
+                    android:alpha="0.3" />
+
+                <ImageView
+                    android:layout_width="40dp"
+                    android:layout_height="40dp"
+                    android:layout_centerInParent="true"
+                    android:src="@drawable/ic_camera"
+                    app:tint="@color/white" />
+            </RelativeLayout>
+
+            <TextView
+                android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
                 android:layout_gravity="center_horizontal"
-                android:gravity="center"
-                android:orientation="vertical"
-                android:layout_marginBottom="20dp">
-                <ImageButton
-                    android:layout_width="wrap_content"
-                    android:layout_height="wrap_content"
-                    android:layout_marginBottom="10dp"
-                    android:padding="30dp"
-                    android:id="@+id/imbPhoto"
-                    android:src="@drawable/ic_camera"
-                    android:background="@drawable/btn_rounded_shape"
-                    />
+                android:layout_marginBottom="30dp"
+                android:text="@string/change_photo"
+                android:fontFamily="@font/montserrat_medium"
+                android:textColor="@color/tiktok_grey"/>
+
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginBottom="20dp"
+                android:gravity="center_vertical">
                 <TextView
-                    android:layout_width="wrap_content"
+                    android:layout_width="100dp"
                     android:layout_height="wrap_content"
-                    android:text="@string/change_photo"
+                    android:fontFamily="@font/montserrat_bold"
+                    android:text="@string/username_label"
+                    android:textColor="@color/black"/>
+                <TextView
+                    android:id="@+id/tvUsername"
+                    android:layout_width="0dp"
+                    android:layout_height="wrap_content"
+                    android:layout_weight="1"
+                    android:fontFamily="@font/montserrat_medium"
+                    android:textColor="@color/tiktok_grey"/>
+                <ImageView
+                    android:id="@+id/imbUsername"
+                    android:layout_width="20dp"
+                    android:layout_height="20dp"
+                    android:src="@drawable/ic_foward"
+                    app:tint="@color/black" />
+            </LinearLayout>
+
+            <LinearLayout
+                android:id="@+id/llEmail"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginBottom="20dp"
+                android:gravity="center_vertical">
+                <TextView
+                    android:layout_width="100dp"
+                    android:layout_height="wrap_content"
+                    android:fontFamily="@font/montserrat_bold"
+                    android:text="@string/email_label"
+                    android:textColor="@color/black"/>
+                <TextView
+                    android:id="@+id/tvEmail"
+                    android:layout_width="0dp"
+                    android:layout_height="wrap_content"
+                    android:layout_weight="1"
+                    android:fontFamily="@font/montserrat_medium"
+                    android:textColor="@color/tiktok_grey"/>
+            </LinearLayout>
+
+            <LinearLayout
+                android:id="@+id/llPhone"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginBottom="20dp"
+                android:gravity="center_vertical">
+                <TextView
+                    android:layout_width="100dp"
+                    android:layout_height="wrap_content"
+                    android:fontFamily="@font/montserrat_bold"
+                    android:text="@string/phone_label"
+                    android:textColor="@color/black"/>
+                <TextView
+                    android:id="@+id/tvPhone"
+                    android:layout_width="0dp"
+                    android:layout_height="wrap_content"
+                    android:layout_weight="1"
                     android:fontFamily="@font/montserrat_medium"
                     android:textColor="@color/tiktok_grey"/>
             </LinearLayout>
@@ -53,98 +136,28 @@
             <LinearLayout
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
-                android:layout_marginBottom="20dp">
-                <TextView
-                    android:layout_width="wrap_content"
-                    android:layout_height="wrap_content"
-                    android:fontFamily="@font/montserrat_bold"
-                    android:paddingEnd="4dp"
-                    android:text="@string/username_label"/>
-                <TextView
-                    android:id="@+id/tvUsername"
-                    android:layout_width="0dp"
-                    android:layout_height="wrap_content"
-                    android:layout_weight="1"
-                    android:fontFamily="@font/montserrat_medium"/>
-                <ImageButton
-                    android:id="@+id/imbUsername"
-                    android:layout_width="wrap_content"
-                    android:layout_height="match_parent"
-                    android:src="@drawable/ic_foward"
-                    android:background="@color/transparent"/>
-            </LinearLayout>
-            <LinearLayout
-                android:id="@+id/llEmail"
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:layout_marginBottom="20dp">
-                <TextView
-                    android:layout_width="wrap_content"
-                    android:layout_height="wrap_content"
-                    android:fontFamily="@font/montserrat_bold"
-                    android:paddingEnd="4dp"
-                    android:text="@string/email_label"/>
-                <TextView
-                    android:id="@+id/tvEmail"
-                    android:layout_width="0dp"
-                    android:layout_height="wrap_content"
-                    android:layout_weight="1"
-                    android:fontFamily="@font/montserrat_medium"/>
-            </LinearLayout>
-
-            <LinearLayout
-                android:id="@+id/llPhone"
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:layout_marginBottom="20dp">
-                <TextView
-                    android:layout_width="wrap_content"
-                    android:layout_height="wrap_content"
-                    android:fontFamily="@font/montserrat_bold"
-                    android:paddingEnd="4dp"
-                    android:text="@string/phone_label"/>
-                <TextView
-                    android:id="@+id/tvPhone"
-                    android:layout_width="0dp"
-                    android:layout_height="wrap_content"
-                    android:layout_weight="1"
-                    android:fontFamily="@font/montserrat_medium"/>
-            </LinearLayout>
-            <LinearLayout
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
                 android:layout_marginBottom="20dp"
-                android:orientation="horizontal">
+                android:gravity="center_vertical">
                 <TextView
-                    android:layout_width="wrap_content"
+                    android:layout_width="100dp"
                     android:layout_height="wrap_content"
                     android:fontFamily="@font/montserrat_bold"
-                    android:paddingEnd="4dp"
                     android:text="@string/birthdate_label"
+                    android:textColor="@color/black"
                     />
                 <TextView
                     android:id="@+id/tvBirthdate"
                     android:layout_width="0dp"
                     android:layout_height="wrap_content"
-                    android:layout_weight="7"
-                    android:fontFamily="@font/montserrat_medium"/>
-                <ImageButton
+                    android:layout_weight="1"
+                    android:fontFamily="@font/montserrat_medium"
+                    android:textColor="@color/tiktok_grey"/>
+                <ImageView
                     android:id="@+id/imbBirthdate"
-                    android:layout_width="wrap_content"
-                    android:layout_height="match_parent"
+                    android:layout_width="20dp"
+                    android:layout_height="20dp"
                     android:src="@drawable/ic_foward"
-                    android:background="@color/transparent"/>
-                <ImageButton
-                    android:id="@+id/imbSelect"
-                    android:layout_width="0dp"
-                    android:layout_height="wrap_content"
-                    android:layout_marginBottom="20dp"
-                    android:paddingVertical="4dp"
-                    android:src="@drawable/ic_more"
-                    android:background="@drawable/btn_red_shape"
-                    android:layout_weight="2"
-                    android:visibility="gone"/>
-
+                    app:tint="@color/black" />
             </LinearLayout>
             
         </LinearLayout>
