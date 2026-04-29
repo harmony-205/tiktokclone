@@ -57,7 +57,6 @@ public class VideoFragment extends Fragment {
                 super.onPageSelected(position);
                 videoAdapter.pauseVideo(videoAdapter.getCurrentPosition());
                 videoAdapter.playVideo(position);
-                videoAdapter.updateWatchCount(position);
                 videoAdapter.updateCurrentPosition(position);
             }
         });
@@ -68,8 +67,7 @@ public class VideoFragment extends Fragment {
 
     public void pauseVideo() {
         if (videoAdapter != null) {
-            int currentPosition = videoAdapter.getCurrentPosition();
-            videoAdapter.pauseVideo(currentPosition);
+            videoAdapter.pauseVideo(videoAdapter.getCurrentPosition());
         }
     }
 
@@ -90,9 +88,10 @@ public class VideoFragment extends Fragment {
             boolean isFirstLoad = videos.isEmpty();
             for (DocumentChange dc : snapshots.getDocumentChanges()) {
                 Video video = dc.getDocument().toObject(Video.class);
+                video.setVideoId(dc.getDocument().getId());
+                
                 switch (dc.getType()) {
                     case ADDED:
-                        // Avoid duplicates
                         boolean exists = false;
                         for (Video v : videos) {
                             if (v.getVideoId().equals(video.getVideoId())) {
@@ -109,8 +108,6 @@ public class VideoFragment extends Fragment {
                         for (int i = 0; i < videos.size(); i++) {
                             if (videos.get(i).getVideoId().equals(video.getVideoId())) {
                                 videos.set(i, video);
-                                // Use payload to avoid restarting player if implementation supports it, 
-                                // otherwise we need to handle it in VideoAdapter.setVideoObjects
                                 videoAdapter.notifyItemChanged(i, "UPDATE_COUNTS");
                                 break;
                             }

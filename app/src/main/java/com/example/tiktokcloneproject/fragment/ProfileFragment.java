@@ -8,10 +8,7 @@ import android.content.Intent;
 import android.graphics.Color;
 import android.graphics.Rect;
 import android.graphics.drawable.ColorDrawable;
-import android.graphics.drawable.Drawable;
 import android.os.Bundle;
-import android.text.Editable;
-import android.text.TextWatcher;
 import android.util.Log;
 import android.view.Gravity;
 import android.view.LayoutInflater;
@@ -27,30 +24,23 @@ import android.widget.TextView;
 import android.widget.Toast;
 
 import androidx.annotation.NonNull;
-import androidx.annotation.Nullable;
 import androidx.fragment.app.Fragment;
 import androidx.recyclerview.widget.GridLayoutManager;
 import androidx.recyclerview.widget.RecyclerView;
 
 import com.bumptech.glide.Glide;
-import com.bumptech.glide.load.DataSource;
 import com.bumptech.glide.load.engine.DiskCacheStrategy;
-import com.bumptech.glide.load.engine.GlideException;
-import com.bumptech.glide.request.RequestListener;
-import com.bumptech.glide.request.target.Target;
 import com.bumptech.glide.signature.ObjectKey;
+import com.example.tiktokcloneproject.R;
 import com.example.tiktokcloneproject.activity.EditProfileActivity;
 import com.example.tiktokcloneproject.activity.FollowListActivity;
 import com.example.tiktokcloneproject.activity.HomeScreenActivity;
-import com.example.tiktokcloneproject.activity.MainActivity;
-import com.example.tiktokcloneproject.R;
 import com.example.tiktokcloneproject.activity.SettingsAndPrivacyActivity;
 import com.example.tiktokcloneproject.adapters.VideoSummaryAdapter;
 import com.example.tiktokcloneproject.helper.StaticVariable;
 import com.example.tiktokcloneproject.model.Notification;
 import com.example.tiktokcloneproject.model.VideoSummary;
 import com.google.android.gms.auth.api.signin.GoogleSignIn;
-import com.google.android.gms.auth.api.signin.GoogleSignInClient;
 import com.google.android.gms.auth.api.signin.GoogleSignInOptions;
 import com.google.firebase.auth.FirebaseAuth;
 import com.google.firebase.auth.FirebaseUser;
@@ -59,6 +49,7 @@ import com.google.firebase.firestore.DocumentSnapshot;
 import com.google.firebase.firestore.FieldValue;
 import com.google.firebase.firestore.FirebaseFirestore;
 import com.google.firebase.firestore.ListenerRegistration;
+import com.google.firebase.firestore.Query;
 import com.google.firebase.firestore.QueryDocumentSnapshot;
 
 import java.util.ArrayList;
@@ -67,7 +58,6 @@ import java.util.List;
 import java.util.Map;
 
 public class ProfileFragment extends Fragment implements View.OnClickListener {
-    final String USERNAME_LABEL = "username";
     private Context context = null;
     private TextView txvFollowing, txvFollowers, txvLikes, txvUserName, txvMenu;
     private EditText edtBio;
@@ -79,11 +69,12 @@ public class ProfileFragment extends Fragment implements View.OnClickListener {
     private FirebaseUser user;
     private String userId;
     private DocumentReference profileDocRef, userDocRef;
-    private ListenerRegistration userListener, profileListener;
+    private ListenerRegistration userListener, profileListener, videosListener;
     private String oldBioText, currentUserID;
     private static final String TAG = "ProfileFragment";
     private RecyclerView recVideoSummary;
     private ArrayList<VideoSummary> videoSummaries;
+    private VideoSummaryAdapter videoSummaryAdapter;
     private LinearLayout layout;
     private int totalLikes = 0;
     private String currentAvatarUrl;
@@ -159,13 +150,12 @@ public class ProfileFragment extends Fragment implements View.OnClickListener {
         userDocRef = db.collection("users").document(userId);
 
         videoSummaries = new ArrayList<>();
+        videoSummaryAdapter = new VideoSummaryAdapter(context, videoSummaries);
         GridLayoutManager gridLayoutManager = new GridLayoutManager(context, 3);
         recVideoSummary.setLayoutManager(gridLayoutManager);
+        recVideoSummary.setAdapter(videoSummaryAdapter);
         recVideoSummary.addItemDecoration(new GridSpacingItemDecoration(3, 10, true));
-        if (userId != null && !userId.isEmpty()) {
-            setVideoSummaries();
-        }
-
+        
         return layout;
     }
 
@@ -180,6 +170,7 @@ public class ProfileFragment extends Fragment implements View.OnClickListener {
         super.onStop();
         if (userListener != null) userListener.remove();
         if (profileListener != null) profileListener.remove();
+        if (videosListener != null) videosListener.remove();
     }
 
     private void startListeningToData() {
@@ -206,6 +197,19 @@ public class ProfileFragment extends Fragment implements View.OnClickListener {
                 updateAvatarImage();
             }
         });
+
+        // Real-time videos update
+        videosListener = db.collection("profiles").document(userId).collection("public_videos")
+                .addSnapshotListener((snapshots, e) -> {
+                    if (e != null || snapshots == null) return;
+                    videoSummaries.clear();
+                    for (QueryDocumentSnapshot document : snapshots) {
+                        videoSummaries.add(new VideoSummary(document.getString("videoId"),
+                                document.getString("thumbnailUri"),
+                                document.getLong("watchCount")));
+                    }
+                    videoSummaryAdapter.notifyDataSetChanged();
+                });
     }
 
     private void updateAvatarImage() {
@@ -281,25 +285,6 @@ public class ProfileFragment extends Fragment implements View.OnClickListener {
         });
     }
 
-    protected void setVideoSummaries() {
-        db.collection("profiles").document(userId).collection("public_videos")
-                .get()
-                .addOnCompleteListener(task -> {
-                    if (task.isSuccessful()) {
-                        videoSummaries.clear();
-                        for (QueryDocumentSnapshot document : task.getResult()) {
-                            videoSummaries.add(new VideoSummary(document.getString("videoId"),
-                                    document.getString("thumbnailUri"),
-                                    document.getLong("watchCount")));
-                        }
-                        if (!videoSummaries.isEmpty()) {
-                            VideoSummaryAdapter videoSummaryAdapter = new VideoSummaryAdapter(context, videoSummaries);
-                            recVideoSummary.setAdapter(videoSummaryAdapter);
-                        }
-                    }
-                });
-    }
-
     @Override
     public void onClick(View v) {
         int id = v.getId();
@@ -356,7 +341,7 @@ public class ProfileFragment extends Fragment implements View.OnClickListener {
         dialog.findViewById(R.id.txvCancelInSharedPlace).setOnClickListener(v -> dialog.cancel());
         dialog.show();
         dialog.getWindow().setLayout(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT);
-        dialog.getWindow().setBackgroundDrawable(new ColorDrawable(Color.TRANSPARENT));
+        dialog.getWindow().setBackgroundDrawable(new ColorDrawable(android.graphics.Color.TRANSPARENT));
         dialog.getWindow().getAttributes().windowAnimations = R.style.DialogAnimation;
         dialog.getWindow().setGravity(Gravity.BOTTOM);
     }
@@ -371,7 +356,7 @@ public class ProfileFragment extends Fragment implements View.OnClickListener {
         });
         dialog.show();
         dialog.getWindow().setLayout(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT);
-        dialog.getWindow().setBackgroundDrawable(new ColorDrawable(Color.TRANSPARENT));
+        dialog.getWindow().setBackgroundDrawable(new ColorDrawable(android.graphics.Color.TRANSPARENT));
         dialog.getWindow().setGravity(Gravity.BOTTOM);
     }
 

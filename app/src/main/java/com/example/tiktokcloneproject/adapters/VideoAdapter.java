@@ -6,6 +6,8 @@ import android.content.Intent;
 import android.graphics.Color;
 import android.graphics.Matrix;
 import android.os.Bundle;
+import android.os.Handler;
+import android.os.Looper;
 import android.view.LayoutInflater;
 import android.view.TextureView;
 import android.view.View;
@@ -16,6 +18,9 @@ import android.widget.Toast;
 
 import androidx.annotation.NonNull;
 import androidx.recyclerview.widget.RecyclerView;
+
+import com.bumptech.glide.Glide;
+import com.bumptech.glide.load.engine.DiskCacheStrategy;
 import com.example.tiktokcloneproject.R;
 import com.example.tiktokcloneproject.activity.CommentActivity;
 import com.example.tiktokcloneproject.helper.OnSwipeTouchListener;
@@ -31,6 +36,7 @@ import com.google.firebase.auth.FirebaseUser;
 import com.google.firebase.firestore.DocumentReference;
 import com.google.firebase.firestore.FieldValue;
 import com.google.firebase.firestore.FirebaseFirestore;
+
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -129,24 +135,18 @@ public class VideoAdapter extends RecyclerView.Adapter<VideoAdapter.VideoViewHol
         }
     }
 
-    public void updateWatchCount(int position) {
-        if (position >= 0 && position < videos.size()) {
-            Video video = videos.get(position);
-            FirebaseFirestore.getInstance().collection("videos")
-                    .document(video.getVideoId())
-                    .update("watchCount", FieldValue.increment(1));
-            video.setWatchCount(video.getWatchCount() + 1);
-        }
-    }
-
     public class VideoViewHolder extends RecyclerView.ViewHolder {
         StyledPlayerView videoView;
         ExoPlayer exoPlayer;
         ImageView imvAvatar, imvShare, imvMore, imvLike, imvComment;
-        TextView tvTitle, txvDescription, tvCommentCount, tvLikeCount;
+        TextView tvTitle, txvDescription, tvCommentCount, tvLikeCount, tvShareCount;
         FirebaseFirestore db;
         boolean isLiked = false;
         String currentUri = "";
+        
+        private final Handler watchHandler = new Handler(Looper.getMainLooper());
+        private Runnable watchRunnable;
+        private boolean viewCountedForCurrentLoop = false;
 
         public VideoViewHolder(@NonNull View itemView) {
             super(itemView);
@@ -155,6 +155,7 @@ public class VideoAdapter extends RecyclerView.Adapter<VideoAdapter.VideoViewHol
             txvDescription = itemView.findViewById(R.id.txvDescription);
             tvCommentCount = itemView.findViewById(R.id.tvComment);
             tvLikeCount = itemView.findViewById(R.id.tvFavorites);
+            tvShareCount = itemView.findViewById(R.id.tvShare);
             imvAvatar = itemView.findViewById(R.id.imvAvatar);
             imvShare = itemView.findViewById(R.id.imvShare);
             imvMore = itemView.findViewById(R.id.imvMore);
@@ -164,9 +165,6 @@ public class VideoAdapter extends RecyclerView.Adapter<VideoAdapter.VideoViewHol
             db = FirebaseFirestore.getInstance();
             videoView.setResizeMode(AspectRatioFrameLayout.RESIZE_MODE_ZOOM);
 
-            if (imvShare != null) {
-                imvShare.setOnClickListener(v -> Toast.makeText(context, "Sharing...", Toast.LENGTH_SHORT).show());
-            }
             if (imvMore != null) {
                 imvMore.setOnClickListener(v -> Toast.makeText(context, "More options", Toast.LENGTH_SHORT).show());
             }
@@ -179,6 +177,9 @@ public class VideoAdapter extends RecyclerView.Adapter<VideoAdapter.VideoViewHol
         public void updateCounts(Video video) {
             tvCommentCount.setText(String.valueOf(video.getTotalComments()));
             tvLikeCount.setText(String.valueOf(video.getTotalLikes()));
+            if (tvShareCount != null) {
+                tvShareCount.setText(String.valueOf(video.getTotalShares()));
+            }
         }
 
         public void playVideo() {
@@ -186,13 +187,14 @@ public class VideoAdapter extends RecyclerView.Adapter<VideoAdapter.VideoViewHol
                 exoPlayer.setPlayWhenReady(true);
                 exoPlayer.play();
                 
+                // Cố định lỗi xoay ngang: Ép buộc trình phát tính toán lại tỷ lệ khung hình
+                videoView.setResizeMode(AspectRatioFrameLayout.RESIZE_MODE_FIT);
                 videoView.post(() -> {
-                    videoView.setResizeMode(AspectRatioFrameLayout.RESIZE_MODE_FIXED_WIDTH);
-                    videoView.post(() -> {
-                        videoView.setResizeMode(AspectRatioFrameLayout.RESIZE_MODE_ZOOM);
-                        videoView.requestLayout();
-                    });
+                    videoView.setResizeMode(AspectRatioFrameLayout.RESIZE_MODE_ZOOM);
+                    videoView.requestLayout();
                 });
+                
+                startWatchTimer();
             }
         }
 
@@ -200,9 +202,11 @@ public class VideoAdapter extends RecyclerView.Adapter<VideoAdapter.VideoViewHol
             if (exoPlayer != null) {
                 exoPlayer.setPlayWhenReady(false);
             }
+            stopWatchTimer();
         }
 
         public void releasePlayer() {
+            stopWatchTimer();
             if (exoPlayer != null) {
                 exoPlayer.clearVideoSurface(); 
                 videoView.setPlayer(null); 
@@ -213,27 +217,82 @@ public class VideoAdapter extends RecyclerView.Adapter<VideoAdapter.VideoViewHol
             }
         }
 
+        private void startWatchTimer() {
+            stopWatchTimer();
+            if (exoPlayer == null || viewCountedForCurrentLoop) return;
+
+            watchRunnable = new Runnable() {
+                @Override
+                public void run() {
+                    if (exoPlayer != null && exoPlayer.getPlayWhenReady()) {
+                        long duration = exoPlayer.getDuration();
+                        long position = exoPlayer.getCurrentPosition();
+                        
+                        // Thuật toán 20% thời lượng
+                        if (duration > 0 && position >= (duration * 0.2)) {
+                            incrementViewCount();
+                            viewCountedForCurrentLoop = true;
+                        } else {
+                            watchHandler.postDelayed(this, 500);
+                        }
+                    }
+                }
+            };
+            watchHandler.postDelayed(watchRunnable, 500);
+        }
+
+        private void stopWatchTimer() {
+            if (watchRunnable != null) {
+                watchHandler.removeCallbacks(watchRunnable);
+            }
+        }
+
+        private void incrementViewCount() {
+            int pos = getBindingAdapterPosition();
+            if (pos == RecyclerView.NO_POSITION) return;
+            
+            Video video = videos.get(pos);
+            String vid = video.getVideoId();
+            String aid = video.getAuthorId();
+            
+            if (vid == null || vid.isEmpty()) return;
+
+            // 1. Cập nhật ở bảng videos chính
+            db.collection("videos").document(vid).update("watchCount", FieldValue.increment(1));
+            
+            // 2. Cập nhật ở bảng public_videos trong Profile tác giả
+            if (aid != null && !aid.isEmpty()) {
+                db.collection("profiles").document(aid).collection("public_videos")
+                    .document(vid).update("watchCount", FieldValue.increment(1));
+            }
+            
+            video.setWatchCount(video.getWatchCount() + 1);
+        }
+
         @SuppressLint("ClickableViewAccessibility")
         public void setVideoObjects(Video video) {
             tvTitle.setText("@" + video.getUsername());
             txvDescription.setText(video.getDescription());
             updateCounts(video);
 
+            loadAuthorAvatar(video.getAuthorId());
             checkLikeStatus(video);
 
             imvLike.setOnClickListener(v -> handleLikeClick(video));
             imvComment.setOnClickListener(v -> openComments(video));
+            imvShare.setOnClickListener(v -> handleShareClick(video));
 
-            // Chỉ khởi tạo lại player nếu URI khác hoặc player chưa có
             if (exoPlayer != null && currentUri.equals(video.getVideoUri())) {
                 return;
             }
 
             releasePlayer();
             currentUri = video.getVideoUri();
+            viewCountedForCurrentLoop = false;
 
             View surfaceView = videoView.getVideoSurfaceView();
             if (surfaceView instanceof TextureView) {
+                surfaceView.setRotation(0); // Đảm bảo rotation về 0
                 ((TextureView) surfaceView).setTransform(new Matrix());
             }
 
@@ -245,6 +304,31 @@ public class VideoAdapter extends RecyclerView.Adapter<VideoAdapter.VideoViewHol
                 public void onVideoSizeChanged(@NonNull VideoSize videoSize) {
                     if (videoSize.width > 0 && videoSize.height > 0) {
                         videoView.setResizeMode(AspectRatioFrameLayout.RESIZE_MODE_ZOOM);
+                        videoView.requestLayout();
+                    }
+                }
+
+                @Override
+                public void onPlaybackStateChanged(int playbackState) {
+                    if (playbackState == Player.STATE_READY) {
+                        startWatchTimer();
+                    }
+                }
+
+                @Override
+                public void onMediaItemTransition(MediaItem mediaItem, int reason) {
+                    viewCountedForCurrentLoop = false;
+                    startWatchTimer();
+                }
+
+                @Override
+                public void onPositionDiscontinuity(Player.PositionInfo oldPosition, Player.PositionInfo newPosition, int reason) {
+                    // Phát hiện xem lặp lại (Loop) để cho phép tính view mới
+                    if (reason == Player.DISCONTINUITY_REASON_AUTO_TRANSITION || reason == Player.DISCONTINUITY_REASON_SEEK) {
+                        if (newPosition.positionMs < oldPosition.positionMs) {
+                            viewCountedForCurrentLoop = false;
+                            startWatchTimer();
+                        }
                     }
                 }
             });
@@ -257,6 +341,26 @@ public class VideoAdapter extends RecyclerView.Adapter<VideoAdapter.VideoViewHol
             if (getBindingAdapterPosition() == currentPosition) {
                 playVideo();
             }
+        }
+
+        private void loadAuthorAvatar(String authorId) {
+            if (authorId == null || authorId.isEmpty()) return;
+            
+            db.collection("users").document(authorId).get().addOnSuccessListener(documentSnapshot -> {
+                if (documentSnapshot.exists()) {
+                    String avatarUrl = documentSnapshot.getString("avatarUrl");
+                    if (avatarUrl != null && !avatarUrl.isEmpty()) {
+                        Glide.with(context)
+                                .load(avatarUrl)
+                                .circleCrop()
+                                .placeholder(R.drawable.default_avatar)
+                                .diskCacheStrategy(DiskCacheStrategy.ALL)
+                                .into(imvAvatar);
+                    } else {
+                        imvAvatar.setImageResource(R.drawable.default_avatar);
+                    }
+                }
+            });
         }
 
         private void checkLikeStatus(Video video) {
@@ -273,7 +377,7 @@ public class VideoAdapter extends RecyclerView.Adapter<VideoAdapter.VideoViewHol
                 .addOnCompleteListener(task -> {
                     if (task.isSuccessful() && task.getResult().exists()) {
                         isLiked = true;
-                        imvLike.setColorFilter(Color.parseColor("#FE2C55")); // Pink/Red TikTok color
+                        imvLike.setColorFilter(Color.parseColor("#FE2C55")); 
                     } else {
                         isLiked = false;
                         imvLike.setColorFilter(Color.WHITE);
@@ -295,7 +399,6 @@ public class VideoAdapter extends RecyclerView.Adapter<VideoAdapter.VideoViewHol
             DocumentReference videoDoc = db.collection("videos").document(video.getVideoId());
 
             if (isLiked) {
-                // Unlike
                 likeDoc.delete().addOnSuccessListener(aVoid -> {
                     isLiked = false;
                     imvLike.setColorFilter(Color.WHITE);
@@ -304,7 +407,6 @@ public class VideoAdapter extends RecyclerView.Adapter<VideoAdapter.VideoViewHol
                     tvLikeCount.setText(String.valueOf(Math.max(0, currentLikes - 1)));
                 });
             } else {
-                // Like
                 Map<String, Object> likeData = new HashMap<>();
                 likeData.put("timestamp", FieldValue.serverTimestamp());
                 likeDoc.set(likeData).addOnSuccessListener(aVoid -> {
@@ -315,6 +417,45 @@ public class VideoAdapter extends RecyclerView.Adapter<VideoAdapter.VideoViewHol
                     tvLikeCount.setText(String.valueOf(currentLikes + 1));
                 });
             }
+        }
+
+        private void handleShareClick(Video video) {
+            Intent shareIntent = new Intent(Intent.ACTION_SEND);
+            shareIntent.setType("text/plain");
+            shareIntent.putExtra(Intent.EXTRA_SUBJECT, "Check out this video!");
+            shareIntent.putExtra(Intent.EXTRA_TEXT, video.getVideoUri());
+            context.startActivity(Intent.createChooser(shareIntent, "Share via"));
+
+            if (user == null) return;
+
+            DocumentReference shareRef = db.collection("shares")
+                    .document(video.getVideoId())
+                    .collection("user_shares")
+                    .document(user.getUid());
+
+            shareRef.get().addOnSuccessListener(documentSnapshot -> {
+                if (!documentSnapshot.exists()) {
+                    Map<String, Object> shareData = new HashMap<>();
+                    shareData.put("timestamp", FieldValue.serverTimestamp());
+                    
+                    shareRef.set(shareData).addOnSuccessListener(aVoid -> {
+                        db.collection("videos").document(video.getVideoId())
+                            .update("totalShares", FieldValue.increment(1))
+                            .addOnSuccessListener(v -> {
+                                video.setTotalShares(video.getTotalShares() + 1);
+                                if (tvShareCount != null) {
+                                    tvShareCount.setText(String.valueOf(video.getTotalShares()));
+                                }
+                                
+                                String aid = video.getAuthorId();
+                                if (aid != null && !aid.isEmpty()) {
+                                    db.collection("profiles").document(aid).collection("public_videos")
+                                        .document(video.getVideoId()).update("totalShares", FieldValue.increment(1));
+                                }
+                            });
+                    });
+                }
+            });
         }
 
         private void openComments(Video video) {

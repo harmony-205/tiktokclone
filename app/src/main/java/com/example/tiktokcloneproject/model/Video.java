@@ -5,7 +5,7 @@ import java.util.Map;
 
 public class Video {
     private String videoId, videoUri, authorId, description, username;
-    private int totalLikes, totalComments;
+    private int totalLikes, totalComments, totalShares;
     private long watchCount;
 
     public Video() {
@@ -19,10 +19,11 @@ public class Video {
         this.description = description;
         this.totalLikes = 0;
         this.totalComments = 0;
+        this.totalShares = 0;
         this.watchCount = 0;
     }
 
-    public Video(String videoId, String videoUri, String authorId, String description, String username, int totalLikes, int totalComments, long watchCount) {
+    public Video(String videoId, String videoUri, String authorId, String description, String username, int totalLikes, int totalComments, int totalShares, long watchCount) {
         this.videoId = videoId;
         this.videoUri = videoUri;
         this.authorId = authorId;
@@ -30,6 +31,7 @@ public class Video {
         this.username = username;
         this.totalLikes = totalLikes;
         this.totalComments = totalComments;
+        this.totalShares = totalShares;
         this.watchCount = watchCount;
     }
 
@@ -89,6 +91,14 @@ public class Video {
         this.totalComments = totalComments;
     }
 
+    public int getTotalShares() {
+        return totalShares;
+    }
+
+    public void setTotalShares(int totalShares) {
+        this.totalShares = totalShares;
+    }
+
     public long getWatchCount() {
         return watchCount;
     }
@@ -106,6 +116,7 @@ public class Video {
         result.put("description", description);
         result.put("totalComments", totalComments);
         result.put("totalLikes", totalLikes);
+        result.put("totalShares", totalShares);
         result.put("watchCount", watchCount);
         return result;
     }

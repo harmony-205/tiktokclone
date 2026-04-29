@@ -73,8 +73,10 @@ public class VideoActivity extends Activity {
                         if (task.isSuccessful() && task.getResult().exists()) {
                             Video video = task.getResult().toObject(Video.class);
                             if (video != null) {
+                                video.setVideoId(task.getResult().getId());
                                 videos.add(video);
                                 videoAdapter.notifyItemInserted(0);
+                                viewPager2.post(() -> videoAdapter.playVideo(0));
                             }
                         }
                     });
@@ -85,7 +87,7 @@ public class VideoActivity extends Activity {
     protected void onPause() {
         super.onPause();
         if (videoAdapter != null) {
-            videoAdapter.releaseAll(); // Giải phóng RAM ngay khi tạm dừng
+            videoAdapter.releaseAll();
         }
     }
 
@@ -107,7 +109,7 @@ public class VideoActivity extends Activity {
 
     public void onClick(View v) {
         if (v.getId() == R.id.btnBackVideo) {
-            onBackPressed(); // Sử dụng hàm chuẩn của Android
+            onBackPressed();
         }
     }
 
