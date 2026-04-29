@@ -61,18 +61,17 @@ import java.util.List;
 import java.util.Map;
 
 public class ProfileActivity extends FragmentActivity implements View.OnClickListener {
-    final String USERNAME_LABEL = "username";
     private TextView txvFollowing, txvFollowers, txvLikes, txvUserName;
     private EditText edtBio;
-    private Button btnEditProfile, btnUpdateBio, btnCancelUpdateBio;
+    private Button btnEditProfile, btnUpdateBio, btnCancelUpdateBio, btnMessage;
     private LinearLayout llFollowing, llFollowers;
     private ImageView imvAvatarProfile;
     private FirebaseFirestore db;
     private FirebaseAuth mAuth;
     private FirebaseUser user;
-    private String userId;
+    private String userId, username;
     private DocumentReference profileDocRef, userDocRef;
-    private ListenerRegistration userListener, profileListener;
+    private ListenerRegistration userListener, profileListener, videosListener;
     private String oldBioText, currentUserID;
     private static final String TAG = "ProfileActivity";
     private RecyclerView recVideoSummary;
@@ -114,7 +113,7 @@ public class ProfileActivity extends FragmentActivity implements View.OnClickLis
         GridLayoutManager gridLayoutManager = new GridLayoutManager(this, 3);
         recVideoSummary.setLayoutManager(gridLayoutManager);
         recVideoSummary.addItemDecoration(new GridSpacingItemDecoration(3, 10, true));
-        setVideoSummaries();
+        // setVideoSummaries(); // Removed as we use real-time listener now
         setLikes(userId);
     }
 
@@ -125,6 +124,7 @@ public class ProfileActivity extends FragmentActivity implements View.OnClickLis
         txvUserName = findViewById(R.id.txv_username);
         edtBio = findViewById(R.id.edt_bio);
         btnEditProfile = findViewById(R.id.button_edit_profile);
+        btnMessage = findViewById(R.id.button_message);
         imvAvatarProfile = findViewById(R.id.imvAvatarProfile);
         llFollowers = findViewById(R.id.ll_followers);
         llFollowing = findViewById(R.id.ll_following);
@@ -137,6 +137,7 @@ public class ProfileActivity extends FragmentActivity implements View.OnClickLis
         llFollowers.setOnClickListener(this);
         llFollowing.setOnClickListener(this);
         imvAvatarProfile.setOnClickListener(this);
+        if (btnMessage != null) btnMessage.setOnClickListener(this);
     }
 
     private void setupProfileUI() {
@@ -153,6 +154,7 @@ public class ProfileActivity extends FragmentActivity implements View.OnClickLis
                 btnEditProfile.setOnClickListener(this);
             } else {
                 handleFollow();
+                if (btnMessage != null) btnMessage.setVisibility(View.VISIBLE);
             }
         } else {
             handleFollow();
@@ -170,6 +172,7 @@ public class ProfileActivity extends FragmentActivity implements View.OnClickLis
         super.onStop();
         if (userListener != null) userListener.remove();
         if (profileListener != null) profileListener.remove();
+        if (videosListener != null) videosListener.remove();
     }
 
     private void startListeningToData() {
@@ -185,7 +188,8 @@ public class ProfileActivity extends FragmentActivity implements View.OnClickLis
         userListener = userDocRef.addSnapshotListener((document, e) -> {
             if (e != null) return;
             if (document != null && document.exists()) {
-                txvUserName.setText("@" + document.getString("username"));
+                username = document.getString("username");
+                txvUserName.setText("@" + username);
                 String avatarUrl = document.getString("avatarUrl");
                 
                 if (avatarUrl != null) {
@@ -194,6 +198,34 @@ public class ProfileActivity extends FragmentActivity implements View.OnClickLis
                 }
             }
         });
+
+        // Real-time videos and likes update
+        videosListener = db.collection("profiles").document(userId).collection("public_videos")
+                .addSnapshotListener((snapshots, e) -> {
+                    if (e != null || snapshots == null) return;
+                    videoSummaries.clear();
+                    int likesCount = 0;
+                    for (QueryDocumentSnapshot document : snapshots) {
+                        videoSummaries.add(new VideoSummary(document.getString("videoId"),
+                                document.getString("thumbnailUri"),
+                                document.getLong("watchCount")));
+                        
+                        Long vLikes = document.getLong("totalLikes");
+                        if (vLikes != null) {
+                            likesCount += vLikes.intValue();
+                        }
+                    }
+                    if (!videoSummaries.isEmpty()) {
+                        VideoSummaryAdapter videoSummaryAdapter = new VideoSummaryAdapter(getApplicationContext(), videoSummaries);
+                        recVideoSummary.setAdapter(videoSummaryAdapter);
+                    }
+                    
+                    if (likesCount != totalLikes) {
+                        totalLikes = likesCount;
+                        txvLikes.setText(String.valueOf(totalLikes));
+                        profileDocRef.update("likes", totalLikes);
+                    }
+                });
     }
 
     private void updateAvatarImage() {
@@ -206,17 +238,6 @@ public class ProfileActivity extends FragmentActivity implements View.OnClickLis
                  .diskCacheStrategy(DiskCacheStrategy.NONE)
                  .skipMemoryCache(true)
                  .signature(new ObjectKey(String.valueOf(System.currentTimeMillis())))
-                 .listener(new RequestListener<Drawable>() {
-                     @Override
-                     public boolean onLoadFailed(@Nullable GlideException e, Object model, Target<Drawable> target, boolean isFirstResource) {
-                         Log.e(TAG, "Glide load failed", e);
-                         return false;
-                     }
-                     @Override
-                     public boolean onResourceReady(Drawable resource, Object model, Target<Drawable> target, DataSource dataSource, boolean isFirstResource) {
-                         return false;
-                     }
-                 })
                  .into(imvAvatarProfile);
         } else {
             imvAvatarProfile.setImageResource(R.drawable.default_avatar);
@@ -232,20 +253,14 @@ public class ProfileActivity extends FragmentActivity implements View.OnClickLis
                     .collection("following").document(userId)
                     .addSnapshotListener((document, e) -> {
                         if (document != null) {
-                            isFollowed = document.exists();
-                            if (isFollowed) {
-                                handleFollowedUI(btnFollow);
-                            } else {
-                                handleUnfollowedUI(btnFollow);
-                            }
+                            if (document.exists()) handleFollowedUI(btnFollow);
+                            else handleUnfollowedUI(btnFollow);
                         }
                     });
         } else {
             btnFollow.setOnClickListener(v -> startActivity(new Intent(ProfileActivity.this, MainActivity.class)));
         }
     }
-
-    boolean isFollowed = false;
 
     private void handleFollowedUI(Button btnFollow) {
         btnFollow.setText("Unfollow");
@@ -254,7 +269,6 @@ public class ProfileActivity extends FragmentActivity implements View.OnClickLis
                 .addOnSuccessListener(aVoid -> {
                     db.collection("profiles").document(currentUserID).update("following", FieldValue.increment(-1));
                     db.collection("profiles").document(userId).update("followers", FieldValue.increment(-1));
-                    handleUnfollowedUI(btnFollow);
                 });
             db.collection("profiles").document(userId).collection("followers").document(currentUserID).delete();
         });
@@ -270,7 +284,6 @@ public class ProfileActivity extends FragmentActivity implements View.OnClickLis
                     db.collection("profiles").document(currentUserID).update("following", FieldValue.increment(1));
                     db.collection("profiles").document(userId).update("followers", FieldValue.increment(1));
                     notifyFollow();
-                    handleFollowedUI(btnFollow);
                 });
             Map<String, Object> data1 = new HashMap<>();
             data1.put("userID", currentUserID);
@@ -288,23 +301,21 @@ public class ProfileActivity extends FragmentActivity implements View.OnClickLis
         });
     }
 
-    protected void setVideoSummaries() {
-        db.collection("profiles").document(userId).collection("public_videos")
-                .get()
-                .addOnCompleteListener(task -> {
-                    if (task.isSuccessful()) {
-                        videoSummaries.clear();
-                        for (QueryDocumentSnapshot document : task.getResult()) {
-                            videoSummaries.add(new VideoSummary(document.getString("videoId"),
-                                    document.getString("thumbnailUri"),
-                                    document.getLong("watchCount")));
-                        }
-                        if (!videoSummaries.isEmpty()) {
-                            VideoSummaryAdapter videoSummaryAdapter = new VideoSummaryAdapter(getApplicationContext(), videoSummaries);
-                            recVideoSummary.setAdapter(videoSummaryAdapter);
-                        }
-                    }
-                });
+    // This method is now handled by the real-time listener in startListeningToData()
+    // but kept for initial load or manual refresh if needed.
+    public void setLikes(String userId) {
+        db.collection("profiles").document(userId).collection("public_videos").get().addOnSuccessListener(queryDocumentSnapshots -> {
+            int likesCount = 0;
+            for (DocumentSnapshot doc : queryDocumentSnapshots) {
+                Long vLikes = doc.getLong("totalLikes");
+                if (vLikes != null) {
+                    likesCount += vLikes.intValue();
+                }
+            }
+            totalLikes = likesCount;
+            txvLikes.setText(String.valueOf(totalLikes));
+            db.collection("profiles").document(userId).update("likes", totalLikes);
+        });
     }
 
     public class GridSpacingItemDecoration extends RecyclerView.ItemDecoration {
@@ -338,7 +349,7 @@ public class ProfileActivity extends FragmentActivity implements View.OnClickLis
         } else if (id == R.id.imvAvatarProfile) {
             showShareAccountDialog();
         } else if (id == R.id.button_edit_profile) {
-            moveToAnotherActivity(EditProfileActivity.class);
+            startActivity(new Intent(this, EditProfileActivity.class));
         } else if (id == R.id.btnBackProfile) {
             finish();
         } else if (id == R.id.btn_update_bio) {
@@ -351,11 +362,14 @@ public class ProfileActivity extends FragmentActivity implements View.OnClickLis
             findViewById(R.id.layout_bio).setVisibility(View.GONE);
             hideKeyboard();
         } else if (id == R.id.ll_followers || id == R.id.ll_following) {
-            if (userId.equals(currentUserID)) {
-                Intent intent = new Intent(ProfileActivity.this, FollowListActivity.class);
-                intent.putExtra("pageIndex", id == R.id.ll_followers ? 1 : 0);
-                startActivity(intent);
-            }
+            Intent intent = new Intent(ProfileActivity.this, FollowListActivity.class);
+            intent.putExtra("pageIndex", id == R.id.ll_followers ? 1 : 0);
+            startActivity(intent);
+        } else if (id == R.id.button_message) {
+            Intent intent = new Intent(this, ChatActivity.class);
+            intent.putExtra("receiverId", userId);
+            intent.putExtra("receiverName", username);
+            startActivity(intent);
         }
     }
 
@@ -413,31 +427,5 @@ public class ProfileActivity extends FragmentActivity implements View.OnClickLis
         GoogleSignInOptions gso = new GoogleSignInOptions.Builder(GoogleSignInOptions.DEFAULT_SIGN_IN).requestIdToken(getString(R.string.default_web_client_id)).requestEmail().build();
         GoogleSignIn.getClient(this, gso).signOut();
         startActivity(new Intent(this, HomeScreenActivity.class));
-    }
-
-    private void moveToAnotherActivity(Class<?> cls) {
-        startActivity(new Intent(this, cls));
-    }
-
-    public void setLikes(String userId) {
-        db.collection("profiles").document(userId).collection("public_videos").get().addOnSuccessListener(queryDocumentSnapshots -> {
-            totalLikes = 0;
-            List<String> userVideos = new ArrayList<>();
-            for (DocumentSnapshot doc : queryDocumentSnapshots) userVideos.add(doc.getId());
-            
-            if (userVideos.isEmpty()) {
-                txvLikes.setText("0");
-                return;
-            }
-
-            db.collection("likes").get().addOnSuccessListener(likesSnapshot -> {
-                for (DocumentSnapshot doc : likesSnapshot) {
-                    if (userVideos.contains(doc.getId())) {
-                        totalLikes += doc.getData() != null ? doc.getData().size() : 0;
-                    }
-                }
-                txvLikes.setText(String.valueOf(totalLikes));
-            });
-        });
     }
 }

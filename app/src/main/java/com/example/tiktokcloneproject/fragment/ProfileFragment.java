@@ -32,6 +32,7 @@ import com.bumptech.glide.Glide;
 import com.bumptech.glide.load.engine.DiskCacheStrategy;
 import com.bumptech.glide.signature.ObjectKey;
 import com.example.tiktokcloneproject.R;
+import com.example.tiktokcloneproject.activity.ChatActivity;
 import com.example.tiktokcloneproject.activity.EditProfileActivity;
 import com.example.tiktokcloneproject.activity.FollowListActivity;
 import com.example.tiktokcloneproject.activity.HomeScreenActivity;
@@ -61,15 +62,15 @@ public class ProfileFragment extends Fragment implements View.OnClickListener {
     private Context context = null;
     private TextView txvFollowing, txvFollowers, txvLikes, txvUserName, txvMenu;
     private EditText edtBio;
-    private Button btnEditProfile, btnUpdateBio, btnCancelUpdateBio;
+    private Button btnEditProfile, btnUpdateBio, btnCancelUpdateBio, btnMessage;
     private LinearLayout llFollowing, llFollowers;
     private ImageView imvAvatarProfile;
     private FirebaseFirestore db;
     private FirebaseAuth mAuth;
     private FirebaseUser user;
-    private String userId;
+    private String userId, username;
     private DocumentReference profileDocRef, userDocRef;
-    private ListenerRegistration userListener, profileListener, videosListener;
+    private ListenerRegistration userListener, profileListener, videosListener, totalLikesListener;
     private String oldBioText, currentUserID;
     private static final String TAG = "ProfileFragment";
     private RecyclerView recVideoSummary;
@@ -114,6 +115,7 @@ public class ProfileFragment extends Fragment implements View.OnClickListener {
         txvMenu = layout.findViewById(R.id.text_menu);
         edtBio = layout.findViewById(R.id.edt_bio);
         btnEditProfile = layout.findViewById(R.id.button_edit_profile);
+        btnMessage = layout.findViewById(R.id.button_message);
         imvAvatarProfile = layout.findViewById(R.id.imvAvatarProfile);
         llFollowers = layout.findViewById(R.id.ll_followers);
         llFollowing = layout.findViewById(R.id.ll_following);
@@ -127,6 +129,7 @@ public class ProfileFragment extends Fragment implements View.OnClickListener {
         llFollowing.setOnClickListener(this);
         txvMenu.setOnClickListener(this);
         imvAvatarProfile.setOnClickListener(this);
+        btnMessage.setOnClickListener(this);
 
         db = FirebaseFirestore.getInstance();
 
@@ -142,8 +145,8 @@ public class ProfileFragment extends Fragment implements View.OnClickListener {
                 btnEditProfile.setOnClickListener(this);
             } else {
                 handleFollow();
+                btnMessage.setVisibility(View.VISIBLE);
             }
-            setLikes(userId);
         }
 
         profileDocRef = db.collection("profiles").document(userId);
@@ -171,6 +174,7 @@ public class ProfileFragment extends Fragment implements View.OnClickListener {
         if (userListener != null) userListener.remove();
         if (profileListener != null) profileListener.remove();
         if (videosListener != null) videosListener.remove();
+        if (totalLikesListener != null) totalLikesListener.remove();
     }
 
     private void startListeningToData() {
@@ -180,7 +184,7 @@ public class ProfileFragment extends Fragment implements View.OnClickListener {
             if (e != null || document == null || !document.exists()) return;
             txvFollowing.setText(String.valueOf(document.getLong("following") != null ? document.getLong("following") : 0));
             txvFollowers.setText(String.valueOf(document.getLong("followers") != null ? document.getLong("followers") : 0));
-            txvLikes.setText(String.valueOf(document.getLong("likes") != null ? document.getLong("likes") : 0));
+            
             String bio = document.getString("bio");
             if (bio != null) {
                 edtBio.setText(bio);
@@ -190,7 +194,8 @@ public class ProfileFragment extends Fragment implements View.OnClickListener {
 
         userListener = userDocRef.addSnapshotListener((document, e) -> {
             if (e != null || document == null || !document.exists()) return;
-            txvUserName.setText("@" + document.getString("username"));
+            username = document.getString("username");
+            txvUserName.setText("@" + username);
             String avatarUrl = document.getString("avatarUrl");
             if (avatarUrl != null) {
                 currentAvatarUrl = avatarUrl;
@@ -198,7 +203,7 @@ public class ProfileFragment extends Fragment implements View.OnClickListener {
             }
         });
 
-        // Real-time videos update
+        // Lắng nghe danh sách video để hiển thị thumbnails
         videosListener = db.collection("profiles").document(userId).collection("public_videos")
                 .addSnapshotListener((snapshots, e) -> {
                     if (e != null || snapshots == null) return;
@@ -209,6 +214,24 @@ public class ProfileFragment extends Fragment implements View.OnClickListener {
                                 document.getLong("watchCount")));
                     }
                     videoSummaryAdapter.notifyDataSetChanged();
+                });
+
+        // Lắng nghe tất cả video của user này trong collection "videos" để tính tổng lượt Like thực tế
+        totalLikesListener = db.collection("videos").whereEqualTo("authorId", userId)
+                .addSnapshotListener((snapshots, e) -> {
+                    if (e != null || snapshots == null) return;
+                    int likesCount = 0;
+                    for (QueryDocumentSnapshot document : snapshots) {
+                        Long vLikes = document.getLong("totalLikes");
+                        if (vLikes != null) {
+                            likesCount += vLikes.intValue();
+                        }
+                    }
+                    totalLikes = likesCount;
+                    txvLikes.setText(String.valueOf(totalLikes));
+                    
+                    // Đồng bộ lại vào profile để các chỗ khác dùng
+                    profileDocRef.update("likes", totalLikes);
                 });
     }
 
@@ -307,6 +330,11 @@ public class ProfileFragment extends Fragment implements View.OnClickListener {
             Intent intent = new Intent(context, FollowListActivity.class);
             intent.putExtra("pageIndex", id == R.id.ll_followers ? 1 : 0);
             startActivity(intent);
+        } else if (id == R.id.button_message) {
+            Intent intent = new Intent(context, ChatActivity.class);
+            intent.putExtra("receiverId", userId);
+            intent.putExtra("receiverName", username);
+            startActivity(intent);
         }
     }
 
@@ -365,26 +393,6 @@ public class ProfileFragment extends Fragment implements View.OnClickListener {
         GoogleSignInOptions gso = new GoogleSignInOptions.Builder(GoogleSignInOptions.DEFAULT_SIGN_IN).requestIdToken("996817465542-qt39vo4n1u3i2ilrnp0vi36s18h2smvb.apps.googleusercontent.com").requestEmail().build();
         GoogleSignIn.getClient(getActivity(), gso).signOut();
         startActivity(new Intent(context, HomeScreenActivity.class));
-    }
-
-    public void setLikes(String userId) {
-        db.collection("profiles").document(userId).collection("public_videos").get().addOnSuccessListener(queryDocumentSnapshots -> {
-            totalLikes = 0;
-            List<String> userVideos = new ArrayList<>();
-            for (DocumentSnapshot doc : queryDocumentSnapshots) userVideos.add(doc.getId());
-            if (userVideos.isEmpty()) {
-                txvLikes.setText("0");
-                return;
-            }
-            db.collection("likes").get().addOnSuccessListener(likesSnapshot -> {
-                for (DocumentSnapshot doc : likesSnapshot) {
-                    if (userVideos.contains(doc.getId())) {
-                        totalLikes += doc.getData() != null ? doc.getData().size() : 0;
-                    }
-                }
-                txvLikes.setText(String.valueOf(totalLikes));
-            });
-        });
     }
 
     public class GridSpacingItemDecoration extends RecyclerView.ItemDecoration {

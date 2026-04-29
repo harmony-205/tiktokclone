@@ -222,12 +222,20 @@ public class DescriptionVideoActivity extends FragmentActivity implements View.O
         String thumbUrl = videoUrl.substring(0, videoUrl.lastIndexOf(".")) + ".jpg";
 
         Video video = new Video(Id, videoUrl, user.getUid(), username, edtDescription.getText().toString());
-        VideoSummary vs = new VideoSummary(Id, thumbUrl, 0L);
+        
+        // Đảm bảo Map có chứa totalLikes
+        Map<String, Object> videoData = video.toMap();
+        
+        Map<String, Object> vsData = new HashMap<>();
+        vsData.put("videoId", Id);
+        vsData.put("thumbnailUri", thumbUrl);
+        vsData.put("watchCount", 0L);
+        vsData.put("totalLikes", 0); // Quan trọng: Khởi tạo số like là 0
 
-        db.collection("videos").document(Id).set(video.toMap()).addOnSuccessListener(aVoid -> {
-            db.collection("profiles").document(user.getUid()).collection("public_videos").document(Id).set(vs.toMap());
+        db.collection("videos").document(Id).set(videoData).addOnSuccessListener(aVoid -> {
+            db.collection("profiles").document(user.getUid()).collection("public_videos").document(Id).set(vsData);
             for (String tag : hashtags) {
-                db.collection("hashtags").document(tag).collection("video_summaries").document(Id).set(vs.toMap());
+                db.collection("hashtags").document(tag).collection("video_summaries").document(Id).set(vsData);
             }
             Toast.makeText(this, "Post successful!", Toast.LENGTH_SHORT).show();
             goHome();

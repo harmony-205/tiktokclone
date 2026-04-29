@@ -23,6 +23,7 @@ import com.bumptech.glide.Glide;
 import com.bumptech.glide.load.engine.DiskCacheStrategy;
 import com.example.tiktokcloneproject.R;
 import com.example.tiktokcloneproject.activity.CommentActivity;
+import com.example.tiktokcloneproject.activity.ProfileActivity;
 import com.example.tiktokcloneproject.helper.OnSwipeTouchListener;
 import com.example.tiktokcloneproject.model.Video;
 import com.google.android.exoplayer2.C;
@@ -187,7 +188,6 @@ public class VideoAdapter extends RecyclerView.Adapter<VideoAdapter.VideoViewHol
                 exoPlayer.setPlayWhenReady(true);
                 exoPlayer.play();
                 
-                // Cố định lỗi xoay ngang: Ép buộc trình phát tính toán lại tỷ lệ khung hình
                 videoView.setResizeMode(AspectRatioFrameLayout.RESIZE_MODE_FIT);
                 videoView.post(() -> {
                     videoView.setResizeMode(AspectRatioFrameLayout.RESIZE_MODE_ZOOM);
@@ -228,7 +228,6 @@ public class VideoAdapter extends RecyclerView.Adapter<VideoAdapter.VideoViewHol
                         long duration = exoPlayer.getDuration();
                         long position = exoPlayer.getCurrentPosition();
                         
-                        // Thuật toán 20% thời lượng
                         if (duration > 0 && position >= (duration * 0.2)) {
                             incrementViewCount();
                             viewCountedForCurrentLoop = true;
@@ -257,10 +256,8 @@ public class VideoAdapter extends RecyclerView.Adapter<VideoAdapter.VideoViewHol
             
             if (vid == null || vid.isEmpty()) return;
 
-            // 1. Cập nhật ở bảng videos chính
             db.collection("videos").document(vid).update("watchCount", FieldValue.increment(1));
             
-            // 2. Cập nhật ở bảng public_videos trong Profile tác giả
             if (aid != null && !aid.isEmpty()) {
                 db.collection("profiles").document(aid).collection("public_videos")
                     .document(vid).update("watchCount", FieldValue.increment(1));
@@ -281,6 +278,15 @@ public class VideoAdapter extends RecyclerView.Adapter<VideoAdapter.VideoViewHol
             imvLike.setOnClickListener(v -> handleLikeClick(video));
             imvComment.setOnClickListener(v -> openComments(video));
             imvShare.setOnClickListener(v -> handleShareClick(video));
+            
+            View.OnClickListener openProfileListener = v -> {
+                Intent intent = new Intent(context, ProfileActivity.class);
+                intent.putExtra("id", video.getAuthorId());
+                context.startActivity(intent);
+            };
+            
+            imvAvatar.setOnClickListener(openProfileListener);
+            tvTitle.setOnClickListener(openProfileListener);
 
             if (exoPlayer != null && currentUri.equals(video.getVideoUri())) {
                 return;
@@ -292,7 +298,7 @@ public class VideoAdapter extends RecyclerView.Adapter<VideoAdapter.VideoViewHol
 
             View surfaceView = videoView.getVideoSurfaceView();
             if (surfaceView instanceof TextureView) {
-                surfaceView.setRotation(0); // Đảm bảo rotation về 0
+                surfaceView.setRotation(0);
                 ((TextureView) surfaceView).setTransform(new Matrix());
             }
 
@@ -323,7 +329,6 @@ public class VideoAdapter extends RecyclerView.Adapter<VideoAdapter.VideoViewHol
 
                 @Override
                 public void onPositionDiscontinuity(Player.PositionInfo oldPosition, Player.PositionInfo newPosition, int reason) {
-                    // Phát hiện xem lặp lại (Loop) để cho phép tính view mới
                     if (reason == Player.DISCONTINUITY_REASON_AUTO_TRANSITION || reason == Player.DISCONTINUITY_REASON_SEEK) {
                         if (newPosition.positionMs < oldPosition.positionMs) {
                             viewCountedForCurrentLoop = false;
@@ -397,12 +402,19 @@ public class VideoAdapter extends RecyclerView.Adapter<VideoAdapter.VideoViewHol
                 .document(user.getUid());
 
             DocumentReference videoDoc = db.collection("videos").document(video.getVideoId());
+            DocumentReference profileDoc = db.collection("profiles").document(video.getAuthorId());
 
             if (isLiked) {
                 likeDoc.delete().addOnSuccessListener(aVoid -> {
                     isLiked = false;
                     imvLike.setColorFilter(Color.WHITE);
                     videoDoc.update("totalLikes", FieldValue.increment(-1));
+                    profileDoc.update("likes", FieldValue.increment(-1));
+                    
+                    // Cập nhật trong sub-collection public_videos của profile
+                    profileDoc.collection("public_videos").document(video.getVideoId())
+                        .update("totalLikes", FieldValue.increment(-1));
+
                     int currentLikes = Integer.parseInt(tvLikeCount.getText().toString());
                     tvLikeCount.setText(String.valueOf(Math.max(0, currentLikes - 1)));
                 });
@@ -413,6 +425,12 @@ public class VideoAdapter extends RecyclerView.Adapter<VideoAdapter.VideoViewHol
                     isLiked = true;
                     imvLike.setColorFilter(Color.parseColor("#FE2C55"));
                     videoDoc.update("totalLikes", FieldValue.increment(1));
+                    profileDoc.update("likes", FieldValue.increment(1));
+                    
+                    // Cập nhật trong sub-collection public_videos của profile
+                    profileDoc.collection("public_videos").document(video.getVideoId())
+                        .update("totalLikes", FieldValue.increment(1));
+
                     int currentLikes = Integer.parseInt(tvLikeCount.getText().toString());
                     tvLikeCount.setText(String.valueOf(currentLikes + 1));
                 });

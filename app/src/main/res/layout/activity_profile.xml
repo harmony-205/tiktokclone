@@ -5,7 +5,8 @@
     android:layout_width="match_parent"
     android:layout_height="match_parent"
     android:orientation="vertical"
-    tools:context=".activity.ProfileActivity">
+    tools:context=".activity.ProfileActivity"
+    android:background="?attr/colorPrimary">
     <FrameLayout
         android:layout_width="match_parent"
         android:layout_height="wrap_content">
@@ -41,7 +42,6 @@
         </LinearLayout>
     </FrameLayout>
 
-    <!-- Dùng ImageView chuẩn để ổn định cao nhất -->
     <ImageView
         android:id="@+id/imvAvatarProfile"
         android:layout_width="100dp"
@@ -50,7 +50,7 @@
         android:clickable="true"
         android:onClick="onClick"
         android:scaleType="centerCrop"
-        tools:src="@drawable/default_avatar" />
+        android:src="@drawable/default_avatar" />
 
     <TextView
         android:id="@+id/txv_username"
@@ -164,23 +164,39 @@
             android:onClick="onClick" />
     </LinearLayout>
 
-    <Button
-        android:id="@+id/button_follow"
-        android:layout_width="180dp"
+    <LinearLayout
+        android:id="@+id/llButtons"
+        android:layout_width="match_parent"
         android:layout_height="wrap_content"
-        android:text="Follow"
-        style="@style/tiktok_button_red"
-        android:layout_gravity="center"
-        android:visibility="gone"/>
+        android:gravity="center"
+        android:orientation="horizontal"
+        android:paddingHorizontal="20dp">
 
-    <Button
-        android:id="@+id/button_edit_profile"
-        android:layout_width="180dp"
-        android:layout_height="wrap_content"
-        android:layout_gravity="center"
-        android:text="Edit profile"
-        style="@style/tiktok_button_transparent"
-        android:visibility="gone"/>
+        <Button
+            android:id="@+id/button_follow"
+            android:layout_width="140dp"
+            android:layout_height="wrap_content"
+            android:text="Follow"
+            style="@style/tiktok_button_red"
+            android:visibility="gone" />
+
+        <Button
+            android:id="@+id/button_message"
+            android:layout_width="140dp"
+            android:layout_height="wrap_content"
+            android:layout_marginStart="10dp"
+            android:text="Tin nhắn"
+            style="@style/tiktok_button_transparent"
+            android:visibility="gone" />
+
+        <Button
+            android:id="@+id/button_edit_profile"
+            android:layout_width="180dp"
+            android:layout_height="wrap_content"
+            android:text="Edit profile"
+            style="@style/tiktok_button_transparent"
+            android:visibility="gone" />
+    </LinearLayout>
 
     <ScrollView
         android:layout_width="match_parent"
