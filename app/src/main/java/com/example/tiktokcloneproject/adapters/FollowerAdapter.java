@@ -1,17 +1,13 @@
 package com.example.tiktokcloneproject.adapters;
 
-import android.annotation.SuppressLint;
 import android.app.Activity;
 import android.app.AlertDialog;
 import android.content.Context;
 import android.content.DialogInterface;
-import android.graphics.Bitmap;
-import android.graphics.BitmapFactory;
 import android.util.Log;
 import android.view.LayoutInflater;
 import android.view.View;
 import android.view.ViewGroup;
-import android.widget.ArrayAdapter;
 import android.widget.BaseAdapter;
 import android.widget.ImageView;
 import android.widget.TextView;
@@ -19,16 +15,13 @@ import android.widget.Toast;
 
 import androidx.annotation.NonNull;
 
+import com.bumptech.glide.Glide;
 import com.example.tiktokcloneproject.R;
 import com.google.android.gms.tasks.OnFailureListener;
 import com.google.android.gms.tasks.OnSuccessListener;
 import com.google.firebase.auth.FirebaseAuth;
 import com.google.firebase.auth.FirebaseUser;
 import com.google.firebase.firestore.FirebaseFirestore;
-import com.google.firebase.storage.FirebaseStorage;
-import com.google.firebase.storage.StorageReference;
-
-import org.w3c.dom.Text;
 
 import java.util.ArrayList;
 
@@ -36,9 +29,10 @@ public class FollowerAdapter extends BaseAdapter {
     private Context context;
     private LayoutInflater inflater;
     private ArrayList<String> followerIdList;
-    private  ArrayList<String> followerUserNameList;
+    private ArrayList<String> followerUserNameList;
 
     public FollowerAdapter(Context context, ArrayList<String> followerIdList, ArrayList<String> followerUserNameList) {
+        this.context = context;
         this.inflater = LayoutInflater.from(context);
         this.followerIdList = followerIdList;
         this.followerUserNameList = followerUserNameList;
@@ -61,40 +55,34 @@ public class FollowerAdapter extends BaseAdapter {
 
     @Override
     public View getView(int i, View view, ViewGroup viewGroup) {
+        if (view == null) {
+            view = inflater.inflate(R.layout.layout_follower_item, viewGroup, false);
+        }
 
-        // Đổ dữ liệu vào biến View, view này chính là những gì nằm trong item_name.xml
-        view = inflater.inflate(R.layout.layout_follower_item, null);
-
-        FirebaseStorage storage;
-        StorageReference storageReference;
-
-        storage = FirebaseStorage.getInstance();
-        storageReference = storage.getReference();
-
-        StorageReference download = storageReference.child("/user_avatars").child(followerIdList.get(i));
-
+        String followerId = followerIdList.get(i);
         ImageView imvAvatar = view.findViewById(R.id.imv_follower_avatar);
+        TextView tvUserName = view.findViewById(R.id.tv_followers_userMame);
+        TextView tvRemove = view.findViewById(R.id.tv_remove_follower);
 
-        long MAX_BYTE = 1024*1024;
-        download.getBytes(MAX_BYTE)
-                .addOnSuccessListener(new OnSuccessListener<byte[]>() {
-                    @Override
-                    public void onSuccess(byte[] bytes) {
-                        Bitmap bitmap = BitmapFactory.decodeByteArray(bytes, 0 , bytes.length);
-                        imvAvatar.setImageBitmap(bitmap);
-                    }
-                })
-                .addOnFailureListener(new OnFailureListener() {
-                    @Override
-                    public void onFailure(@NonNull Exception e) {
-                        // Do nothing
-                    }
-                });
-        TextView tvUserName = (TextView) view.findViewById(R.id.tv_followers_userMame);
         tvUserName.setText(followerUserNameList.get(i));
-        TextView tvRemove = (TextView) view.findViewById(R.id.tv_remove_follower);
+        imvAvatar.setImageResource(R.drawable.default_avatar);
 
         FirebaseFirestore db = FirebaseFirestore.getInstance();
+
+        // Load avatar using avatarUrl from user document instead of direct Storage download
+        db.collection("users").document(followerId).get().addOnSuccessListener(document -> {
+            if (document.exists()) {
+                String avatarUrl = document.getString("avatarUrl");
+                if (avatarUrl != null && !avatarUrl.isEmpty()) {
+                    Glide.with(context)
+                         .load(avatarUrl)
+                         .placeholder(R.drawable.default_avatar)
+                         .circleCrop()
+                         .into(imvAvatar);
+                }
+            }
+        });
+
         FirebaseAuth auth = FirebaseAuth.getInstance();
         FirebaseUser currentUser = auth.getCurrentUser();
         tvRemove.setOnClickListener(new View.OnClickListener() {

@@ -2,8 +2,6 @@ package com.example.tiktokcloneproject.activity;
 
 import android.app.Activity;
 import android.content.Intent;
-import android.graphics.Bitmap;
-import android.graphics.BitmapFactory;
 import android.os.Bundle;
 import android.text.TextUtils;
 import android.util.Log;
@@ -15,6 +13,7 @@ import android.widget.LinearLayout;
 import android.widget.ListView;
 import android.widget.Toast;
 
+import com.bumptech.glide.Glide;
 import com.example.tiktokcloneproject.R;
 import com.example.tiktokcloneproject.adapters.CommentAdapter;
 import com.example.tiktokcloneproject.helper.StaticVariable;
@@ -24,8 +23,6 @@ import com.google.firebase.auth.FirebaseAuth;
 import com.google.firebase.auth.FirebaseUser;
 import com.google.firebase.firestore.DocumentChange;
 import com.google.firebase.firestore.FirebaseFirestore;
-import com.google.firebase.storage.FirebaseStorage;
-import com.google.firebase.storage.StorageReference;
 
 import java.util.ArrayList;
 
@@ -36,13 +33,10 @@ public class CommentActivity extends Activity implements View.OnClickListener {
     private EditText edtComment;
     private ImageButton imbSendComment;
     private String videoId, userId;
-    private Bitmap bitmap;
     private ListView lvComment;
     FirebaseAuth mAuth;
     FirebaseUser user;
     FirebaseFirestore db;
-    FirebaseStorage storage;
-    StorageReference storageRef;
     String username;
     String authorVideoId;
     CommentAdapter adapter;
@@ -70,8 +64,6 @@ public class CommentActivity extends Activity implements View.OnClickListener {
         db = FirebaseFirestore.getInstance();
         mAuth = FirebaseAuth.getInstance();
         user = mAuth.getCurrentUser();
-        storage = FirebaseStorage.getInstance();
-        storageRef = storage.getReference();
         
         comments = new ArrayList<>();
         adapter = new CommentAdapter(this, R.layout.layout_row_comment, comments);
@@ -86,16 +78,18 @@ public class CommentActivity extends Activity implements View.OnClickListener {
                     .get().addOnSuccessListener(document -> {
                         if (document.exists()) {
                             username = document.getString("username");
+                            String avatarUrl = document.getString("avatarUrl");
+                            if (avatarUrl != null && !avatarUrl.isEmpty()) {
+                                Glide.with(this)
+                                     .load(avatarUrl)
+                                     .placeholder(R.drawable.default_avatar)
+                                     .circleCrop()
+                                     .into(imvMyAvatarInComment);
+                            } else {
+                                imvMyAvatarInComment.setImageResource(R.drawable.default_avatar);
+                            }
                         }
                     });
-
-            StorageReference download = storageRef.child("/user_avatars").child(userId);
-            download.getBytes(StaticVariable.MAX_BYTES_AVATAR)
-                    .addOnSuccessListener(bytes -> {
-                        bitmap = BitmapFactory.decodeByteArray(bytes, 0, bytes.length);
-                        imvMyAvatarInComment.setImageBitmap(bitmap);
-                    })
-                    .addOnFailureListener(e -> Log.e(TAG, "Failed to load avatar", e));
         } else {
             Toast.makeText(this, "Vui lòng đăng nhập để bình luận", Toast.LENGTH_SHORT).show();
             finish();

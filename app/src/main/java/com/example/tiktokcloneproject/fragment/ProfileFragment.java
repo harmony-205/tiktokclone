@@ -390,7 +390,10 @@ public class ProfileFragment extends Fragment implements View.OnClickListener {
 
     public void signOut() {
         FirebaseAuth.getInstance().signOut();
-        GoogleSignInOptions gso = new GoogleSignInOptions.Builder(GoogleSignInOptions.DEFAULT_SIGN_IN).requestIdToken("996817465542-qt39vo4n1u3i2ilrnp0vi36s18h2smvb.apps.googleusercontent.com").requestEmail().build();
+        GoogleSignInOptions gso = new GoogleSignInOptions.Builder(GoogleSignInOptions.DEFAULT_SIGN_IN)
+                .requestIdToken(getString(R.string.default_web_client_id))
+                .requestEmail()
+                .build();
         GoogleSignIn.getClient(getActivity(), gso).signOut();
         startActivity(new Intent(context, HomeScreenActivity.class));
     }

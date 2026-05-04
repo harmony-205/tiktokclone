@@ -49,9 +49,9 @@ public class EmailSignInActivity extends Activity {
         mAuth = FirebaseAuth.getInstance();
         db = FirebaseFirestore.getInstance();
 
-        // SỬA LỖI: Dán trực tiếp Web Client ID thật vào đây
+        // Sử dụng ID từ strings.xml để đảm bảo tính nhất quán
         GoogleSignInOptions gso = new GoogleSignInOptions.Builder(GoogleSignInOptions.DEFAULT_SIGN_IN)
-                .requestIdToken("996817465542-qt39vo4n1u3i2ilrnp0vi36s18h2smvb.apps.googleusercontent.com")
+                .requestIdToken(getString(R.string.default_web_client_id))
                 .requestEmail()
                 .build();
 

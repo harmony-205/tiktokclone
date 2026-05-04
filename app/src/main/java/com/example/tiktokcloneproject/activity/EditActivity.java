@@ -279,8 +279,6 @@ public class EditActivity extends Activity implements View.OnClickListener {
     }
 
     private void backToEditProfile() {
-        Intent intent = new Intent(EditActivity.this, EditProfileActivity.class);
-        startActivity(intent);
         finish();
     }
 

@@ -25,6 +25,8 @@ import com.example.tiktokcloneproject.R;
 import com.example.tiktokcloneproject.activity.CommentActivity;
 import com.example.tiktokcloneproject.activity.ProfileActivity;
 import com.example.tiktokcloneproject.helper.OnSwipeTouchListener;
+import com.example.tiktokcloneproject.helper.StaticVariable;
+import com.example.tiktokcloneproject.model.Notification;
 import com.example.tiktokcloneproject.model.Video;
 import com.google.android.exoplayer2.C;
 import com.google.android.exoplayer2.ExoPlayer;
@@ -411,7 +413,6 @@ public class VideoAdapter extends RecyclerView.Adapter<VideoAdapter.VideoViewHol
                     videoDoc.update("totalLikes", FieldValue.increment(-1));
                     profileDoc.update("likes", FieldValue.increment(-1));
                     
-                    // Cập nhật trong sub-collection public_videos của profile
                     profileDoc.collection("public_videos").document(video.getVideoId())
                         .update("totalLikes", FieldValue.increment(-1));
 
@@ -427,12 +428,21 @@ public class VideoAdapter extends RecyclerView.Adapter<VideoAdapter.VideoViewHol
                     videoDoc.update("totalLikes", FieldValue.increment(1));
                     profileDoc.update("likes", FieldValue.increment(1));
                     
-                    // Cập nhật trong sub-collection public_videos của profile
                     profileDoc.collection("public_videos").document(video.getVideoId())
                         .update("totalLikes", FieldValue.increment(1));
 
                     int currentLikes = Integer.parseInt(tvLikeCount.getText().toString());
                     tvLikeCount.setText(String.valueOf(currentLikes + 1));
+                    
+                    // Gửi thông báo khi có người Like
+                    if (!user.getUid().equals(video.getAuthorId())) {
+                        db.collection("users").document(user.getUid()).get().addOnSuccessListener(documentSnapshot -> {
+                            if (documentSnapshot.exists()) {
+                                String currentUsername = documentSnapshot.getString("username");
+                                Notification.pushNotification(currentUsername, video.getAuthorId(), StaticVariable.LIKE);
+                            }
+                        });
+                    }
                 });
             }
         }

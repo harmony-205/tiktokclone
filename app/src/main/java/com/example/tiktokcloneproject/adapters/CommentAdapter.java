@@ -3,9 +3,6 @@ package com.example.tiktokcloneproject.adapters;
 import android.app.Activity;
 import android.content.Context;
 import android.content.Intent;
-import android.graphics.Bitmap;
-import android.graphics.BitmapFactory;
-import android.os.Bundle;
 import android.view.LayoutInflater;
 import android.view.View;
 import android.view.ViewGroup;
@@ -17,19 +14,12 @@ import android.widget.Toast;
 import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
 
+import com.bumptech.glide.Glide;
 import com.example.tiktokcloneproject.R;
 import com.example.tiktokcloneproject.activity.ProfileActivity;
-import com.example.tiktokcloneproject.helper.StaticVariable;
 import com.example.tiktokcloneproject.model.Comment;
-import com.google.android.gms.tasks.OnCompleteListener;
-import com.google.android.gms.tasks.OnFailureListener;
-import com.google.android.gms.tasks.OnSuccessListener;
-import com.google.android.gms.tasks.Task;
 import com.google.firebase.firestore.DocumentReference;
-import com.google.firebase.firestore.DocumentSnapshot;
 import com.google.firebase.firestore.FirebaseFirestore;
-import com.google.firebase.storage.FirebaseStorage;
-import com.google.firebase.storage.StorageReference;
 
 import java.util.ArrayList;
 
@@ -61,7 +51,7 @@ public class CommentAdapter extends ArrayAdapter<Comment> {
             
             // Default values while loading
             txvUsernameInComment.setText("@loading...");
-            imvAvatarInComment.setImageResource(R.drawable.group19onblack);
+            imvAvatarInComment.setImageResource(R.drawable.default_avatar);
 
             String authorId = comment.getAuthorId();
             if (authorId != null && !authorId.isEmpty()) {
@@ -70,9 +60,17 @@ public class CommentAdapter extends ArrayAdapter<Comment> {
                     if (document.exists()) {
                         String username = document.getString("username");
                         txvUsernameInComment.setText(username != null ? "@" + username : "@unknown");
+
+                        String avatarUrl = document.getString("avatarUrl");
+                        if (avatarUrl != null && !avatarUrl.isEmpty()) {
+                            Glide.with(context)
+                                 .load(avatarUrl)
+                                 .placeholder(R.drawable.default_avatar)
+                                 .circleCrop()
+                                 .into(imvAvatarInComment);
+                        }
                     }
                 });
-                loadAvatar(authorId, imvAvatarInComment);
             } else {
                 txvUsernameInComment.setText("@unknown");
             }
@@ -95,15 +93,5 @@ public class CommentAdapter extends ArrayAdapter<Comment> {
         }
 
         return row;
-    }
-
-    private void loadAvatar(String authorId, ImageView imv) {
-        StorageReference download = FirebaseStorage.getInstance().getReference().child("/user_avatars").child(authorId);
-        download.getBytes(StaticVariable.MAX_BYTES_AVATAR)
-                .addOnSuccessListener(bytes -> {
-                    Bitmap bitmap = BitmapFactory.decodeByteArray(bytes, 0, bytes.length);
-                    imv.setImageBitmap(bitmap);
-                })
-                .addOnFailureListener(e -> imv.setImageResource(R.drawable.group19onblack));
     }
 }
