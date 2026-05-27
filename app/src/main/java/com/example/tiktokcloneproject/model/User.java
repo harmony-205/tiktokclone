@@ -61,7 +61,7 @@ public class User implements Serializable {
         result.put("userId", userId);
         result.put("username", username);
         result.put("birthdate", birthdate);
-        result.put("avatarrUri", avatarUri);
+        result.put("avatarUrl", avatarUri);
         result.put("email", email);
         result.put("isPrivate", isPrivate);
         result.put("phone", phone);

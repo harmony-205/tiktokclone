@@ -12,11 +12,13 @@ import android.view.LayoutInflater;
 import android.view.TextureView;
 import android.view.View;
 import android.view.ViewGroup;
+import android.widget.Button;
 import android.widget.ImageView;
 import android.widget.TextView;
 import android.widget.Toast;
 
 import androidx.annotation.NonNull;
+import androidx.appcompat.app.AlertDialog;
 import androidx.recyclerview.widget.RecyclerView;
 
 import com.bumptech.glide.Glide;
@@ -169,7 +171,13 @@ public class VideoAdapter extends RecyclerView.Adapter<VideoAdapter.VideoViewHol
             videoView.setResizeMode(AspectRatioFrameLayout.RESIZE_MODE_ZOOM);
 
             if (imvMore != null) {
-                imvMore.setOnClickListener(v -> Toast.makeText(context, "More options", Toast.LENGTH_SHORT).show());
+                imvMore.setOnClickListener(v -> {
+                    int pos = getAdapterPosition();
+                    if (pos != RecyclerView.NO_POSITION) {
+                        Video video = videos.get(pos);
+                        showMoreOptions(video);
+                    }
+                });
             }
 
             videoView.setOnTouchListener(new OnSwipeTouchListener(itemView.getContext()) {
@@ -411,7 +419,10 @@ public class VideoAdapter extends RecyclerView.Adapter<VideoAdapter.VideoViewHol
                     isLiked = false;
                     imvLike.setColorFilter(Color.WHITE);
                     videoDoc.update("totalLikes", FieldValue.increment(-1));
-                    profileDoc.update("likes", FieldValue.increment(-1));
+                    
+                    Map<String, Object> dec = new HashMap<>();
+                    dec.put("likes", FieldValue.increment(-1));
+                    profileDoc.set(dec, com.google.firebase.firestore.SetOptions.merge());
                     
                     profileDoc.collection("public_videos").document(video.getVideoId())
                         .update("totalLikes", FieldValue.increment(-1));
@@ -426,7 +437,10 @@ public class VideoAdapter extends RecyclerView.Adapter<VideoAdapter.VideoViewHol
                     isLiked = true;
                     imvLike.setColorFilter(Color.parseColor("#FE2C55"));
                     videoDoc.update("totalLikes", FieldValue.increment(1));
-                    profileDoc.update("likes", FieldValue.increment(1));
+                    
+                    Map<String, Object> inc = new HashMap<>();
+                    inc.put("likes", FieldValue.increment(1));
+                    profileDoc.set(inc, com.google.firebase.firestore.SetOptions.merge());
                     
                     profileDoc.collection("public_videos").document(video.getVideoId())
                         .update("totalLikes", FieldValue.increment(1));
@@ -494,6 +508,54 @@ public class VideoAdapter extends RecyclerView.Adapter<VideoAdapter.VideoViewHol
             bundle.putInt("totalComments", video.getTotalComments());
             intent.putExtras(bundle);
             context.startActivity(intent);
+        }
+
+        private void showMoreOptions(Video video) {
+            if (user == null) return;
+
+            if (user.getUid().equals(video.getAuthorId())) {
+                new AlertDialog.Builder(context)
+                    .setTitle("Tùy chọn video")
+                    .setItems(new String[]{"Xóa video"}, (dialog, which) -> {
+                        if (which == 0) {
+                            deleteVideo(video);
+                        }
+                    })
+                    .show();
+            } else {
+                Toast.makeText(context, "Bạn không có quyền xóa video này", Toast.LENGTH_SHORT).show();
+            }
+        }
+
+        private void deleteVideo(Video video) {
+            AlertDialog dialog = new AlertDialog.Builder(context)
+                .setTitle("Xác nhận xóa")
+                .setMessage("Bạn có chắc chắn muốn xóa video này không?")
+                .setPositiveButton("Xóa", (d, which) -> {
+                    db.collection("videos").document(video.getVideoId()).delete()
+                        .addOnSuccessListener(aVoid -> {
+                            db.collection("profiles").document(user.getUid())
+                                .collection("public_videos").document(video.getVideoId()).delete();
+                            
+                            Toast.makeText(context, "Đã xóa video", Toast.LENGTH_SHORT).show();
+                            
+                            int pos = videos.indexOf(video);
+                            if (pos != -1) {
+                                videos.remove(pos);
+                                notifyItemRemoved(pos);
+                            }
+                        })
+                        .addOnFailureListener(e -> Toast.makeText(context, "Lỗi khi xóa: " + e.getMessage(), Toast.LENGTH_SHORT).show());
+                })
+                .setNegativeButton("Hủy", null)
+                .create();
+
+            dialog.show();
+            // Fix white on white buttons
+            Button pBtn = dialog.getButton(AlertDialog.BUTTON_POSITIVE);
+            if (pBtn != null) pBtn.setTextColor(Color.RED);
+            Button nBtn = dialog.getButton(AlertDialog.BUTTON_NEGATIVE);
+            if (nBtn != null) nBtn.setTextColor(Color.BLACK);
         }
     }
 }

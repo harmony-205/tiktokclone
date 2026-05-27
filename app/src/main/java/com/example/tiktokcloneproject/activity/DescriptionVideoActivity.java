@@ -74,9 +74,6 @@ public class DescriptionVideoActivity extends FragmentActivity implements View.O
         super.onCreate(savedInstanceState);
         setContentView(R.layout.activity_description_video);
 
-        // Khởi tạo Cloudinary
-        initCloudinary();
-
         edtDescription = findViewById(R.id.edtDescription);
         btnDescription = findViewById(R.id.btnDescription);
         imvShortCutVideo = findViewById(R.id.imvShortCutVideo);
@@ -106,18 +103,6 @@ public class DescriptionVideoActivity extends FragmentActivity implements View.O
                 .setOnlyAlertOnce(true);
 
         btnDescription.setOnClickListener(this);
-    }
-
-    private void initCloudinary() {
-        try {
-            Map<String, String> config = new HashMap<>();
-            config.put("cloud_name", "dmygicxxy");
-            config.put("api_key", "172799859182813");
-            config.put("api_secret", "PAtcEgMVj8evo3bGG4oayayKf20");
-            MediaManager.init(this, config);
-        } catch (IllegalStateException e) {
-            // Đã khởi tạo
-        }
     }
 
     private void loadVideoMetadata() {
@@ -189,10 +174,14 @@ public class DescriptionVideoActivity extends FragmentActivity implements View.O
                     @Override
                     public void onProgress(String requestId, long bytes, long totalBytes) {
                         int progress = (int) (100.0 * bytes / totalBytes);
+                        Log.d(TAG, "Upload progress: " + progress + "%");
                         if (progress >= lastProgress + 5) {
                             lastProgress = progress;
-                            mBuilder.setProgress(100, progress, false);
-                            notifyProgress();
+                            runOnUiThread(() -> {
+                                btnDescription.setText("Uploading (" + progress + "%)");
+                                mBuilder.setProgress(100, progress, false);
+                                notifyProgress();
+                            });
                         }
                     }
 
@@ -241,7 +230,15 @@ public class DescriptionVideoActivity extends FragmentActivity implements View.O
             goHome();
         }).addOnFailureListener(e -> {
             Log.e(TAG, "Firestore error: " + e.getMessage());
-            runOnUiThread(() -> btnDescription.setEnabled(true));
+            runOnUiThread(() -> {
+                btnDescription.setEnabled(true);
+                btnDescription.setText("Post");
+                if (e.getMessage() != null && e.getMessage().contains("PERMISSION_DENIED")) {
+                    Toast.makeText(this, "Lỗi: Không có quyền ghi dữ liệu. Vui lòng kiểm tra Firestore Rules.", Toast.LENGTH_LONG).show();
+                } else {
+                    Toast.makeText(this, "Lỗi Firestore: " + e.getMessage(), Toast.LENGTH_SHORT).show();
+                }
+            });
         });
     }
 

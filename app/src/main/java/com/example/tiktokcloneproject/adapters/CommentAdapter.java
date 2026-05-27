@@ -33,10 +33,12 @@ public class CommentAdapter extends ArrayAdapter<Comment> {
 
     @Override
     public View getView(int position, @Nullable View convertView, ViewGroup parent) {
-        View row = convertView;
-        if (row == null) {
+        final View row;
+        if (convertView == null) {
             LayoutInflater inflater = ((Activity) context).getLayoutInflater();
             row = inflater.inflate(R.layout.layout_row_comment, parent, false);
+        } else {
+            row = convertView;
         }
 
         ImageView imvAvatarInComment = row.findViewById(R.id.imvAvatarInComment);
@@ -49,15 +51,18 @@ public class CommentAdapter extends ArrayAdapter<Comment> {
             txvComment.setText(comment.getContent());
             txvTotalLikeComment.setText(String.valueOf(comment.getTotalLikes()));
             
-            // Default values while loading
-            txvUsernameInComment.setText("@loading...");
+            // Clear recycled data immediately
+            txvUsernameInComment.setText("@...");
             imvAvatarInComment.setImageResource(R.drawable.default_avatar);
 
-            String authorId = comment.getAuthorId();
+            final String authorId = comment.getAuthorId();
+            row.setTag(authorId); 
+
             if (authorId != null && !authorId.isEmpty()) {
                 DocumentReference docRef = FirebaseFirestore.getInstance().collection("users").document(authorId);
                 docRef.get().addOnSuccessListener(document -> {
-                    if (document.exists()) {
+                    // Check if the view is still intended for this author
+                    if (document.exists() && authorId.equals(row.getTag())) {
                         String username = document.getString("username");
                         txvUsernameInComment.setText(username != null ? "@" + username : "@unknown");
 

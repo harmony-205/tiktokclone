@@ -29,32 +29,24 @@ import com.google.firebase.auth.AuthResult;
 import com.google.firebase.auth.FirebaseAuth;
 import com.google.firebase.auth.FirebaseUser;
 import com.google.firebase.auth.GoogleAuthProvider;
+import com.google.firebase.firestore.DocumentReference;
 import com.google.firebase.firestore.DocumentSnapshot;
 import com.google.firebase.firestore.FieldValue;
 import com.google.firebase.firestore.FirebaseFirestore;
+import com.google.firebase.firestore.WriteBatch;
 
 import java.util.HashMap;
 import java.util.Map;
 
-public class EmailSignupActivity extends Activity{
-
-    EditText edtEmail;
-    Button btnEmail;
+public class EmailSignupActivity extends Activity {
 
     private static final String TAG = "EmailSignUpActivity";
     private static final int RC_SIGN_IN = 9001;
 
-    private String msg;
-
-    // [START declare_auth]
     private FirebaseAuth mAuth;
-    private  FirebaseFirestore db;
-    // [END declare_auth]
-
+    private FirebaseFirestore db;
     private GoogleSignInClient mGoogleSignInClient;
-
     private Dialog dialog;
-
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -63,7 +55,9 @@ public class EmailSignupActivity extends Activity{
         mAuth = FirebaseAuth.getInstance();
         db = FirebaseFirestore.getInstance();
 
-        // Sử dụng ID từ strings.xml để đảm bảo tính nhất quán
+        // Ensure a fresh login attempt
+        mAuth.signOut();
+
         GoogleSignInOptions gso = new GoogleSignInOptions.Builder(GoogleSignInOptions.DEFAULT_SIGN_IN)
                 .requestIdToken(getString(R.string.default_web_client_id))
                 .requestEmail()
@@ -80,7 +74,6 @@ public class EmailSignupActivity extends Activity{
         signUp();
     }
 
-
     @Override
     public void onActivityResult(int requestCode, int resultCode, Intent data) {
         super.onActivityResult(requestCode, resultCode, data);
@@ -96,39 +89,74 @@ public class EmailSignupActivity extends Activity{
             } catch (ApiException e) {
                 Log.w(TAG, "Google sign in failed, code: " + e.getStatusCode(), e);
                 Toast.makeText(this, "Lỗi đăng nhập Google: " + e.getStatusCode(), Toast.LENGTH_SHORT).show();
-                finish();
             }
         }
     }
 
-    private void firebaseAuthWithGoogle(String idToken) {
-        AuthCredential credential = GoogleAuthProvider.getCredential(idToken, null);
+    private void handleSignUp(GoogleSignInAccount account) {
+        AuthCredential credential = GoogleAuthProvider.getCredential(account.getIdToken(), null);
         mAuth.signInWithCredential(credential)
-                .addOnCompleteListener(this, new OnCompleteListener<AuthResult>() {
-                    @Override
-                    public void onComplete(@NonNull Task<AuthResult> task) {
-                        if (task.isSuccessful()) {
-                            Log.d(TAG, "signInWithCredential:success");
-                            dialog.dismiss();
-                            FirebaseUser firebaseUser = mAuth.getCurrentUser();
-                            if (firebaseUser != null) {
-                                String id = firebaseUser.getUid();
-                                String username = id.substring(0, Math.min(id.length(), 6));
-                                User user = new User(id, username, "", firebaseUser.getEmail());
-                                writeNewUser(user);
-                                Profile profile = new Profile(id, username);
-                                writeNewProfile(profile);
-                                moveToAnotherActivity(HomeScreenActivity.class);
-                            }
-
-                        } else {
-                            dialog.dismiss();
-                            Log.w(TAG, "signInWithCredential:failure", task.getException());
-                            Toast.makeText(EmailSignupActivity.this, "Xác thực Firebase thất bại", Toast.LENGTH_SHORT).show();
-                            moveToAnotherActivity(SignupChoiceActivity.class);
+                .addOnCompleteListener(this, task -> {
+                    if (task.isSuccessful()) {
+                        FirebaseUser firebaseUser = mAuth.getCurrentUser();
+                        if (firebaseUser != null) {
+                            Log.d(TAG, "Firebase Auth success. UID: " + firebaseUser.getUid());
+                            // After auth success, verify existence in Firestore
+                            checkUserInFirestore(firebaseUser);
                         }
+                    } else {
+                        dialog.dismiss();
+                        Log.e(TAG, "Firebase auth failed", task.getException());
+                        Toast.makeText(this, "Xác thực Firebase thất bại: " + (task.getException() != null ? task.getException().getMessage() : "Lỗi không xác định"), Toast.LENGTH_LONG).show();
                     }
                 });
+    }
+
+    private void checkUserInFirestore(FirebaseUser firebaseUser) {
+        // Explicitly get a new instance to ensure the token is updated
+        FirebaseFirestore.getInstance().collection("users").document(firebaseUser.getUid())
+                .get()
+                .addOnCompleteListener(task -> {
+                    if (task.isSuccessful()) {
+                        DocumentSnapshot document = task.getResult();
+                        if (document != null && document.exists()) {
+                            // User already exists in Firestore. 
+                            // In a SIGNUP flow, this means they should be using the Sign-In screen instead.
+                            dialog.dismiss();
+                            Log.d(TAG, "User exists in Firestore. Notifying user to sign in.");
+                            Toast.makeText(EmailSignupActivity.this, "Email này đã được đăng ký, vui lòng Đăng nhập", Toast.LENGTH_LONG).show();
+                            
+                            // Sign out and send them to the Sign-In choice screen
+                            mAuth.signOut();
+                            moveToAnotherActivity(SigninChoiceActivity.class);
+                        } else {
+                            Log.d(TAG, "New user or missing Firestore data. Creating...");
+                            createNewUserRecords(firebaseUser);
+                        }
+                    } else {
+                        dialog.dismiss();
+                        String errorMsg = task.getException() != null ? task.getException().getMessage() : "Permission Denied";
+                        Log.e(TAG, "Firestore check failed: " + errorMsg);
+                        
+                        Toast.makeText(EmailSignupActivity.this, "Lỗi phân quyền Firestore: Vui lòng kiểm tra Rules trên Firebase Console.", Toast.LENGTH_LONG).show();
+                        mAuth.signOut();
+                    }
+                });
+    }
+
+    private void createNewUserRecords(FirebaseUser firebaseUser) {
+        String id = firebaseUser.getUid();
+        String username = id.substring(0, Math.min(id.length(), 6));
+        User user = new User(id, username, "", firebaseUser.getEmail());
+        
+        writeNewUser(user, aVoid -> {
+            Profile profile = new Profile(id, username);
+            writeNewProfile(profile, aVoid1 -> {
+                dialog.dismiss();
+                Log.d(TAG, "All records created successfully.");
+                moveToAnotherActivity(HomeScreenActivity.class);
+            });
+        });
     }
 
     private void signUp() {
@@ -136,26 +164,41 @@ public class EmailSignupActivity extends Activity{
         startActivityForResult(signInIntent, RC_SIGN_IN);
     }
 
-    private void writeNewUser(User user) {
+    private void writeNewUser(User user, OnSuccessListener<Void> successListener) {
         Map<String, Object> userValues = user.toMap();
         db.collection("users").document(user.getUserId())
                 .set(userValues)
-                .addOnSuccessListener(aVoid -> Log.d(TAG, "User written!"))
-                .addOnFailureListener(e -> Log.w(TAG, "Error writing user", e));
+                .addOnSuccessListener(successListener)
+                .addOnFailureListener(e -> {
+                    dialog.dismiss();
+                    Log.w(TAG, "Error writing user", e);
+                    Toast.makeText(EmailSignupActivity.this, "Lỗi tạo thông tin người dùng", Toast.LENGTH_SHORT).show();
+                });
     }
 
-    private void writeNewProfile(Profile profile) {
-        Map<String, Object> userValues = profile.toMap();
-        db.collection("profiles").document(profile.getUserId())
-                .set(userValues)
-                .addOnSuccessListener(aVoid -> Log.d(TAG, "Profile written!"))
-                .addOnFailureListener(e -> Log.w(TAG, "Error writing profile", e));
+    private void writeNewProfile(Profile profile, OnSuccessListener<Void> successListener) {
+        WriteBatch batch = db.batch();
+        DocumentReference profileRef = db.collection("profiles").document(profile.getUserId());
         
-        Map<String, Object> Data1 = new HashMap<>();
-        Data1.put("userID","dump");
+        batch.set(profileRef, profile.toMap());
+        
+        // Use separate document IDs to avoid sub-collection creation issues in batch if needed
+        Map<String, Object> data = new HashMap<>();
+        data.put("userID", "initial");
+        batch.set(profileRef.collection("following").document("initial"), data);
+        batch.set(profileRef.collection("followers").document("initial"), data);
 
-        db.collection("profiles").document(profile.getUserId()).collection("following").document("dump").set(Data1);
-        db.collection("profiles").document(profile.getUserId()).collection("followers").document("dump").set(Data1);
+        batch.commit()
+                .addOnSuccessListener(successListener)
+                .addOnFailureListener(e -> {
+                    dialog.dismiss();
+                    Log.e(TAG, "Error writing profile Batch: " + e.getMessage(), e);
+                    if (e.getMessage() != null && e.getMessage().contains("PERMISSION_DENIED")) {
+                        Toast.makeText(EmailSignupActivity.this, "Lỗi phân quyền Firestore khi tạo hồ sơ. Hãy kiểm tra lại Rules.", Toast.LENGTH_LONG).show();
+                    } else {
+                        Toast.makeText(EmailSignupActivity.this, "Lỗi tạo hồ sơ: " + e.getMessage(), Toast.LENGTH_SHORT).show();
+                    }
+                });
     }
 
     private void moveToAnotherActivity(Class<?> cls) {
@@ -163,35 +206,5 @@ public class EmailSignupActivity extends Activity{
         intent.setFlags(Intent.FLAG_ACTIVITY_CLEAR_TOP);
         startActivity(intent);
         finish();
-    }
-
-    private void handleSignUp(GoogleSignInAccount account) {
-        db.collection("users")
-                .whereEqualTo("email", account.getEmail())
-                .get().addOnCompleteListener(task -> {
-                    if (task.isSuccessful()) {
-                        boolean exists = false;
-                        for (DocumentSnapshot document : task.getResult()) {
-                            if (document.exists()) {
-                                exists = true;
-                                break;
-                            }
-                        }
-
-                        if (!exists) {
-                            firebaseAuthWithGoogle(account.getIdToken());
-                        } else {
-                            dialog.dismiss();
-                            Toast.makeText(EmailSignupActivity.this, "Email này đã được đăng ký, vui lòng Đăng nhập", Toast.LENGTH_LONG).show();
-                            finish();
-                        }
-                    } else {
-                        dialog.dismiss();
-                        Log.d(TAG, "Error getting documents: ", task.getException());
-                        Toast.makeText(EmailSignupActivity.this, "Lỗi kiểm tra dữ liệu: " + task.getException().getMessage(), Toast.LENGTH_SHORT).show();
-                        firebaseAuthWithGoogle(account.getIdToken());
-                    }
-                });
-
     }
 }

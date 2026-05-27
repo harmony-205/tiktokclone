@@ -52,6 +52,7 @@ import com.google.firebase.firestore.FirebaseFirestore;
 import com.google.firebase.firestore.ListenerRegistration;
 import com.google.firebase.firestore.Query;
 import com.google.firebase.firestore.QueryDocumentSnapshot;
+import com.google.firebase.firestore.SetOptions;
 
 import java.util.ArrayList;
 import java.util.HashMap;
@@ -182,8 +183,21 @@ public class ProfileFragment extends Fragment implements View.OnClickListener {
 
         profileListener = profileDocRef.addSnapshotListener((document, e) -> {
             if (e != null || document == null || !document.exists()) return;
-            txvFollowing.setText(String.valueOf(document.getLong("following") != null ? document.getLong("following") : 0));
-            txvFollowers.setText(String.valueOf(document.getLong("followers") != null ? document.getLong("followers") : 0));
+            
+            long following = document.getLong("following") != null ? document.getLong("following") : 0;
+            long followers = document.getLong("followers") != null ? document.getLong("followers") : 0;
+            
+            // Tự động sửa dữ liệu nếu bị âm do lỗi cũ
+            if (following < 0 || followers < 0) {
+                Map<String, Object> fix = new HashMap<>();
+                if (following < 0) fix.put("following", 0);
+                if (followers < 0) fix.put("followers", 0);
+                profileDocRef.update(fix);
+                return;
+            }
+
+            txvFollowing.setText(String.valueOf(following));
+            txvFollowers.setText(String.valueOf(followers));
             
             String bio = document.getString("bio");
             if (bio != null) {
@@ -231,7 +245,9 @@ public class ProfileFragment extends Fragment implements View.OnClickListener {
                     txvLikes.setText(String.valueOf(totalLikes));
                     
                     // Đồng bộ lại vào profile để các chỗ khác dùng
-                    profileDocRef.update("likes", totalLikes);
+                    Map<String, Object> likeUpdate = new HashMap<>();
+                    likeUpdate.put("likes", totalLikes);
+                    profileDocRef.set(likeUpdate, SetOptions.merge());
                 });
     }
 
@@ -261,40 +277,57 @@ public class ProfileFragment extends Fragment implements View.OnClickListener {
             db.collection("profiles").document(currentUserID)
                     .collection("following").document(userId)
                     .addSnapshotListener((document, e) -> {
+                        if (e != null) return;
                         if (document != null) {
-                            if (document.exists()) handleFollowedUI(btnFollow);
-                            else handleUnfollowedUI(btnFollow);
+                            boolean isFollowing = document.exists();
+                            btnFollow.setText(isFollowing ? "Unfollow" : "Follow");
+                            btnFollow.setOnClickListener(v -> toggleFollow(isFollowing));
                         }
                     });
         }
     }
 
-    private void handleFollowedUI(Button btnFollow) {
-        btnFollow.setText("Unfollow");
-        btnFollow.setOnClickListener(v -> {
-            db.collection("profiles").document(currentUserID).collection("following").document(userId).delete()
-                .addOnSuccessListener(aVoid -> {
-                    db.collection("profiles").document(currentUserID).update("following", FieldValue.increment(-1));
-                    db.collection("profiles").document(userId).update("followers", FieldValue.increment(-1));
-                });
-            db.collection("profiles").document(userId).collection("followers").document(currentUserID).delete();
-        });
-    }
+    private void toggleFollow(boolean isCurrentlyFollowing) {
+        com.google.firebase.firestore.WriteBatch batch = db.batch();
+        
+        DocumentReference myFollowingRef = db.collection("profiles").document(currentUserID).collection("following").document(userId);
+        DocumentReference theirFollowerRef = db.collection("profiles").document(userId).collection("followers").document(currentUserID);
+        DocumentReference myProfileRef = db.collection("profiles").document(currentUserID);
+        DocumentReference theirProfileRef = db.collection("profiles").document(userId);
 
-    private void handleUnfollowedUI(Button btnFollow) {
-        btnFollow.setText("Follow");
-        btnFollow.setOnClickListener(v -> {
+        if (isCurrentlyFollowing) {
+            batch.delete(myFollowingRef);
+            batch.delete(theirFollowerRef);
+            
+            Map<String, Object> dec = new HashMap<>();
+            dec.put("following", FieldValue.increment(-1));
+            batch.set(myProfileRef, dec, SetOptions.merge());
+
+            Map<String, Object> decF = new HashMap<>();
+            decF.put("followers", FieldValue.increment(-1));
+            batch.set(theirProfileRef, decF, SetOptions.merge());
+        } else {
             Map<String, Object> data = new HashMap<>();
             data.put("userID", userId);
-            db.collection("profiles").document(currentUserID).collection("following").document(userId).set(data)
-                .addOnSuccessListener(aVoid -> {
-                    db.collection("profiles").document(currentUserID).update("following", FieldValue.increment(1));
-                    db.collection("profiles").document(userId).update("followers", FieldValue.increment(1));
-                    notifyFollow();
-                });
+            batch.set(myFollowingRef, data);
+
             Map<String, Object> data1 = new HashMap<>();
             data1.put("userID", currentUserID);
-            db.collection("profiles").document(userId).collection("followers").document(currentUserID).set(data1);
+            batch.set(theirFollowerRef, data1);
+
+            Map<String, Object> inc = new HashMap<>();
+            inc.put("following", FieldValue.increment(1));
+            batch.set(myProfileRef, inc, SetOptions.merge());
+
+            Map<String, Object> incF = new HashMap<>();
+            incF.put("followers", FieldValue.increment(1));
+            batch.set(theirProfileRef, incF, SetOptions.merge());
+        }
+
+        batch.commit().addOnSuccessListener(aVoid -> {
+            if (!isCurrentlyFollowing) notifyFollow();
+        }).addOnFailureListener(e -> {
+            if (context != null) Toast.makeText(context, "Thao tác thất bại: " + e.getMessage(), Toast.LENGTH_LONG).show();
         });
     }
 

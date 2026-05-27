@@ -45,7 +45,9 @@ public class InboxFragment extends Fragment {
     private FirebaseUser currentUser;
     private View blankInbox;
     private TextView tvFollowerCount, tvActivityCount;
-    private DatabaseReference mNotificationDatabase;
+    private com.google.firebase.database.DatabaseReference mNotificationDatabase;
+    private com.google.firebase.firestore.ListenerRegistration conversationListener;
+    private com.google.firebase.database.ValueEventListener notificationListener;
 
     public static InboxFragment newInstance(String strArg) {
         InboxFragment fragment = new InboxFragment();
@@ -103,7 +105,7 @@ public class InboxFragment extends Fragment {
 
     private void setupNotificationListeners() {
         mNotificationDatabase = FirebaseDatabase.getInstance().getReference().child(currentUser.getUid());
-        mNotificationDatabase.addValueEventListener(new ValueEventListener() {
+        notificationListener = new ValueEventListener() {
             @Override
             public void onDataChange(@NonNull DataSnapshot snapshot) {
                 int followerCount = 0;
@@ -127,7 +129,8 @@ public class InboxFragment extends Fragment {
             @Override
             public void onCancelled(@NonNull DatabaseError error) {
             }
-        });
+        };
+        mNotificationDatabase.addValueEventListener(notificationListener);
     }
 
     private void updateBadge(TextView tv, int count) {
@@ -140,7 +143,7 @@ public class InboxFragment extends Fragment {
     }
 
     private void listenForConversations() {
-        db.collection("conversations")
+        conversationListener = db.collection("conversations")
                 .orderBy("timestamp", Query.Direction.DESCENDING)
                 .addSnapshotListener((value, error) -> {
                     if (error != null) {
@@ -154,7 +157,9 @@ public class InboxFragment extends Fragment {
                             String chatId = dc.getDocument().getId();
 
                             if (chatId.contains(currentUser.getUid())) {
-                                String otherUserId = chatId.replace(currentUser.getUid(), "").replace("_", "");
+                                String[] ids = chatId.split("_");
+                                if (ids.length < 2) continue;
+                                String otherUserId = ids[0].equals(currentUser.getUid()) ? ids[1] : ids[0];
                                 
                                 switch (dc.getType()) {
                                     case ADDED:
@@ -171,6 +176,17 @@ public class InboxFragment extends Fragment {
                         blankInbox.setVisibility(conversationList.isEmpty() ? View.VISIBLE : View.GONE);
                     }
                 });
+    }
+
+    @Override
+    public void onDestroyView() {
+        super.onDestroyView();
+        if (conversationListener != null) {
+            conversationListener.remove();
+        }
+        if (mNotificationDatabase != null && notificationListener != null) {
+            mNotificationDatabase.removeEventListener(notificationListener);
+        }
     }
 
     private void addOrUpdateConversation(String chatId, ChatMessage lastMsg, String otherUserId) {

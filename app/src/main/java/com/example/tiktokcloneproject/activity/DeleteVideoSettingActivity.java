@@ -75,13 +75,12 @@ public class DeleteVideoSettingActivity extends AppCompatActivity {
                 AlertDialog.Builder builder1 = new AlertDialog.Builder(DeleteVideoSettingActivity.this);
                 builder1.setMessage("Are you sure you want to delete this video?");
                 builder1.setCancelable(true);
-                builder1.setInverseBackgroundForced(true);
 
                 builder1.setPositiveButton(
                         "Delete",
                         new DialogInterface.OnClickListener() {
                             public void onClick(DialogInterface dialog, int id) {
-                                String url = (new StringBuilder()).append("videos/").append(videoId).append(".mp4").toString();
+                                String url = "videos/" + videoId + ".mp4";
                                 Log.d("URL", url);
                                 FirebaseStorage storage = FirebaseStorage.getInstance();
                                 StorageReference storageRef = storage.getReference();
@@ -91,31 +90,42 @@ public class DeleteVideoSettingActivity extends AppCompatActivity {
                                 desertRef.delete().addOnSuccessListener(new OnSuccessListener<Void>() {
                                     @Override
                                     public void onSuccess(Void aVoid) {
-
                                         deleteVideoIdOnHashTag(videoId);
-
                                         Toast.makeText(DeleteVideoSettingActivity.this, "Delete successfully", Toast.LENGTH_SHORT).show();
                                         Intent intent = new Intent(DeleteVideoSettingActivity.this, HomeScreenActivity.class);
                                         intent.addFlags(Intent.FLAG_ACTIVITY_CLEAR_TOP);
                                         startActivity(intent);
-
                                         finish();
                                     }
                                 }).addOnFailureListener(new OnFailureListener() {
                                     @Override
                                     public void onFailure(@NonNull Exception exception) {
-                                        Toast.makeText(DeleteVideoSettingActivity.this, "Failed", Toast.LENGTH_SHORT).show();
+                                        Toast.makeText(DeleteVideoSettingActivity.this, "Failed: " + exception.getMessage(), Toast.LENGTH_SHORT).show();
                                     }
-                                });;
-                                dialog.cancel();
+                                });
+                                dialog.dismiss();
                             }
-                        }).show();
+                        });
+
+                builder1.setNegativeButton("Cancel", new DialogInterface.OnClickListener() {
+                    @Override
+                    public void onClick(DialogInterface dialog, int which) {
+                        dialog.dismiss();
+                    }
+                });
 
                 AlertDialog alert11 = builder1.create();
                 alert11.show();
-                Button buttonBackground = alert11.getButton(DialogInterface.BUTTON_POSITIVE);
-                buttonBackground.setBackgroundColor(Color.RED);
 
+                // Fix white on white buttons
+                Button pBtn = alert11.getButton(DialogInterface.BUTTON_POSITIVE);
+                if (pBtn != null) {
+                    pBtn.setTextColor(Color.RED);
+                }
+                Button nBtn = alert11.getButton(DialogInterface.BUTTON_NEGATIVE);
+                if (nBtn != null) {
+                    nBtn.setTextColor(Color.BLACK);
+                }
             }
         });
     }

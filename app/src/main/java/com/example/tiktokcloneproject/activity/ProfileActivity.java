@@ -54,6 +54,7 @@ import com.google.firebase.firestore.FieldValue;
 import com.google.firebase.firestore.FirebaseFirestore;
 import com.google.firebase.firestore.ListenerRegistration;
 import com.google.firebase.firestore.QueryDocumentSnapshot;
+import com.google.firebase.firestore.SetOptions;
 
 import java.util.ArrayList;
 import java.util.HashMap;
@@ -177,12 +178,23 @@ public class ProfileActivity extends FragmentActivity implements View.OnClickLis
 
     private void startListeningToData() {
         profileListener = profileDocRef.addSnapshotListener((document, e) -> {
-            if (e != null) return;
-            if (document != null && document.exists()) {
-                txvFollowing.setText(String.valueOf(document.getLong("following") != null ? document.getLong("following") : 0));
-                txvFollowers.setText(String.valueOf(document.getLong("followers") != null ? document.getLong("followers") : 0));
-                txvLikes.setText(String.valueOf(document.getLong("likes") != null ? document.getLong("likes") : 0));
+            if (e != null || document == null || !document.exists()) return;
+            
+            long following = document.getLong("following") != null ? document.getLong("following") : 0;
+            long followers = document.getLong("followers") != null ? document.getLong("followers") : 0;
+            
+            // Tự động sửa dữ liệu nếu bị âm do lỗi cũ
+            if (following < 0 || followers < 0) {
+                Map<String, Object> fix = new HashMap<>();
+                if (following < 0) fix.put("following", 0);
+                if (followers < 0) fix.put("followers", 0);
+                profileDocRef.update(fix);
+                return;
             }
+
+            txvFollowing.setText(String.valueOf(following));
+            txvFollowers.setText(String.valueOf(followers));
+            txvLikes.setText(String.valueOf(document.getLong("likes") != null ? document.getLong("likes") : 0));
         });
 
         userListener = userDocRef.addSnapshotListener((document, e) -> {
@@ -223,7 +235,10 @@ public class ProfileActivity extends FragmentActivity implements View.OnClickLis
                     if (likesCount != totalLikes) {
                         totalLikes = likesCount;
                         txvLikes.setText(String.valueOf(totalLikes));
-                        profileDocRef.update("likes", totalLikes);
+                        
+                        Map<String, Object> likeUpdate = new HashMap<>();
+                        likeUpdate.put("likes", totalLikes);
+                        profileDocRef.set(likeUpdate, SetOptions.merge());
                     }
                 });
     }
@@ -248,13 +263,19 @@ public class ProfileActivity extends FragmentActivity implements View.OnClickLis
         Button btnFollow = findViewById(R.id.button_follow);
         btnFollow.setVisibility(View.VISIBLE);
 
-        if (user != null) {
+        if (user != null && userId != null) {
+            // Lắng nghe trạng thái follow để cập nhật giao diện nút
             db.collection("profiles").document(currentUserID)
                     .collection("following").document(userId)
                     .addSnapshotListener((document, e) -> {
+                        if (e != null) {
+                            Log.e(TAG, "Lỗi lắng nghe follow: " + e.getMessage());
+                            return;
+                        }
                         if (document != null) {
-                            if (document.exists()) handleFollowedUI(btnFollow);
-                            else handleUnfollowedUI(btnFollow);
+                            boolean isFollowing = document.exists();
+                            btnFollow.setText(isFollowing ? "Unfollow" : "Follow");
+                            btnFollow.setOnClickListener(v -> toggleFollow(isFollowing));
                         }
                     });
         } else {
@@ -262,41 +283,59 @@ public class ProfileActivity extends FragmentActivity implements View.OnClickLis
         }
     }
 
-    private void handleFollowedUI(Button btnFollow) {
-        btnFollow.setText("Unfollow");
-        btnFollow.setOnClickListener(v -> {
-            db.collection("profiles").document(currentUserID).collection("following").document(userId).delete()
-                .addOnSuccessListener(aVoid -> {
-                    db.collection("profiles").document(currentUserID).update("following", FieldValue.increment(-1));
-                    db.collection("profiles").document(userId).update("followers", FieldValue.increment(-1));
-                });
-            db.collection("profiles").document(userId).collection("followers").document(currentUserID).delete();
-        });
-    }
+    private void toggleFollow(boolean isCurrentlyFollowing) {
+        com.google.firebase.firestore.WriteBatch batch = db.batch();
+        
+        DocumentReference myFollowingRef = db.collection("profiles").document(currentUserID).collection("following").document(userId);
+        DocumentReference theirFollowerRef = db.collection("profiles").document(userId).collection("followers").document(currentUserID);
+        DocumentReference myProfileRef = db.collection("profiles").document(currentUserID);
+        DocumentReference theirProfileRef = db.collection("profiles").document(userId);
 
-    private void handleUnfollowedUI(Button btnFollow) {
-        btnFollow.setText("Follow");
-        btnFollow.setOnClickListener(v -> {
+        if (isCurrentlyFollowing) {
+            // Hủy follow
+            batch.delete(myFollowingRef);
+            batch.delete(theirFollowerRef);
+            
+            Map<String, Object> dec = new HashMap<>();
+            dec.put("following", FieldValue.increment(-1));
+            batch.set(myProfileRef, dec, SetOptions.merge());
+
+            Map<String, Object> decF = new HashMap<>();
+            decF.put("followers", FieldValue.increment(-1));
+            batch.set(theirProfileRef, decF, SetOptions.merge());
+        } else {
+            // Follow mới
             Map<String, Object> data = new HashMap<>();
             data.put("userID", userId);
-            db.collection("profiles").document(currentUserID).collection("following").document(userId).set(data)
-                .addOnSuccessListener(aVoid -> {
-                    db.collection("profiles").document(currentUserID).update("following", FieldValue.increment(1));
-                    db.collection("profiles").document(userId).update("followers", FieldValue.increment(1));
-                    notifyFollow();
-                });
+            batch.set(myFollowingRef, data);
+
             Map<String, Object> data1 = new HashMap<>();
             data1.put("userID", currentUserID);
-            db.collection("profiles").document(userId).collection("followers").document(currentUserID).set(data1);
+            batch.set(theirFollowerRef, data1);
+
+            Map<String, Object> inc = new HashMap<>();
+            inc.put("following", FieldValue.increment(1));
+            batch.set(myProfileRef, inc, SetOptions.merge());
+
+            Map<String, Object> incF = new HashMap<>();
+            incF.put("followers", FieldValue.increment(1));
+            batch.set(theirProfileRef, incF, SetOptions.merge());
+        }
+
+        batch.commit().addOnSuccessListener(aVoid -> {
+            if (!isCurrentlyFollowing) notifyFollow();
+        }).addOnFailureListener(e -> {
+            Toast.makeText(this, "Thao tác thất bại: " + e.getMessage(), Toast.LENGTH_LONG).show();
         });
     }
 
     public void notifyFollow() {
         if (user == null) return;
-        userDocRef.get().addOnSuccessListener(document -> {
+        // Lấy tên của chính mình (người đang đi follow) để gửi thông báo
+        db.collection("users").document(currentUserID).get().addOnSuccessListener(document -> {
             if (document.exists()) {
-                String username = document.getString("username");
-                Notification.pushNotification(username, userId, StaticVariable.FOLLOW);
+                String myUsername = document.getString("username");
+                Notification.pushNotification(myUsername, userId, StaticVariable.FOLLOW);
             }
         });
     }

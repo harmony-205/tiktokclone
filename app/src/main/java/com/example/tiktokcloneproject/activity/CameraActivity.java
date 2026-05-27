@@ -16,6 +16,7 @@ import android.hardware.camera2.params.StreamConfigurationMap;
 import android.media.MediaRecorder;
 import android.media.MediaScannerConnection;
 import android.net.Uri;
+import android.os.Build;
 import android.os.Bundle;
 import android.os.Environment;
 import android.os.Handler;
@@ -100,12 +101,15 @@ public class CameraActivity extends Activity implements View.OnClickListener {
         @Override
         public void onOpened(@NonNull CameraDevice cameraDevice) {
             mainCamera = cameraDevice;
-            try {
-                setupMediaRecorder();
-                startCameraSession();
-            } catch (IOException e) {
-                Log.e(TAG, "MediaRecorder setup failed", e);
-            }
+            runOnUiThread(() -> {
+                try {
+                    setupMediaRecorder();
+                    startCameraSession();
+                } catch (IOException e) {
+                    Log.e(TAG, "MediaRecorder setup failed", e);
+                    Toast.makeText(CameraActivity.this, "Không thể khởi tạo camera: " + e.getMessage(), Toast.LENGTH_SHORT).show();
+                }
+            });
         }
         @Override
         public void onDisconnected(@NonNull CameraDevice cameraDevice) {
@@ -172,14 +176,26 @@ public class CameraActivity extends Activity implements View.OnClickListener {
     }
 
     private boolean hasPermissions() {
-        return ContextCompat.checkSelfPermission(this, Manifest.permission.CAMERA) == PackageManager.PERMISSION_GRANTED &&
-               ContextCompat.checkSelfPermission(this, Manifest.permission.RECORD_AUDIO) == PackageManager.PERMISSION_GRANTED;
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+            return ContextCompat.checkSelfPermission(this, Manifest.permission.CAMERA) == PackageManager.PERMISSION_GRANTED &&
+                   ContextCompat.checkSelfPermission(this, Manifest.permission.RECORD_AUDIO) == PackageManager.PERMISSION_GRANTED;
+        } else {
+            return ContextCompat.checkSelfPermission(this, Manifest.permission.CAMERA) == PackageManager.PERMISSION_GRANTED &&
+                   ContextCompat.checkSelfPermission(this, Manifest.permission.RECORD_AUDIO) == PackageManager.PERMISSION_GRANTED &&
+                   ContextCompat.checkSelfPermission(this, Manifest.permission.WRITE_EXTERNAL_STORAGE) == PackageManager.PERMISSION_GRANTED;
+        }
     }
 
     private void requestPermissions() {
-        ActivityCompat.requestPermissions(this, 
-                new String[]{Manifest.permission.CAMERA, Manifest.permission.RECORD_AUDIO}, 
-                REQUEST_PERMISSIONS);
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+            ActivityCompat.requestPermissions(this,
+                    new String[]{Manifest.permission.CAMERA, Manifest.permission.RECORD_AUDIO},
+                    REQUEST_PERMISSIONS);
+        } else {
+            ActivityCompat.requestPermissions(this,
+                    new String[]{Manifest.permission.CAMERA, Manifest.permission.RECORD_AUDIO, Manifest.permission.WRITE_EXTERNAL_STORAGE},
+                    REQUEST_PERMISSIONS);
+        }
     }
 
     @SuppressLint("MissingPermission")
@@ -361,15 +377,31 @@ public class CameraActivity extends Activity implements View.OnClickListener {
     }
 
     private void setupMediaRecorder() throws IOException {
-        if (mediaRecorder == null) mediaRecorder = new MediaRecorder();
-        else mediaRecorder.reset();
+        if (mediaRecorder == null) {
+            mediaRecorder = new MediaRecorder();
+        } else {
+            try {
+                mediaRecorder.reset();
+            } catch (IllegalStateException e) {
+                Log.e(TAG, "MediaRecorder reset failed, creating new instance", e);
+                mediaRecorder = new MediaRecorder();
+            }
+        }
 
         mediaRecorder.setAudioSource(MediaRecorder.AudioSource.MIC);
         mediaRecorder.setVideoSource(MediaRecorder.VideoSource.SURFACE);
         mediaRecorder.setOutputFormat(MediaRecorder.OutputFormat.MPEG_4);
         
         String ts = new SimpleDateFormat("yyyyMMdd_HHmmss").format(new Date());
-        videoFileHolder = File.createTempFile(userId + "_" + ts, ".mp4", new File(videoFolder));
+
+        File dir = new File(videoFolder);
+        if (!dir.exists() && !dir.mkdirs()) {
+            // Fallback to internal cache if external storage is not available
+            dir = getExternalCacheDir();
+            if (dir == null) dir = getCacheDir();
+        }
+
+        videoFileHolder = File.createTempFile(userId + "_" + ts, ".mp4", dir);
         videoFileName = videoFileHolder.getAbsolutePath();
         
         mediaRecorder.setOutputFile(videoFileName);

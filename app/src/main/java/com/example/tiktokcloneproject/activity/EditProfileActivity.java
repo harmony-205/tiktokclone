@@ -51,19 +51,8 @@ public class EditProfileActivity extends Activity implements View.OnClickListene
 
         db = FirebaseFirestore.getInstance();
         user = FirebaseAuth.getInstance().getCurrentUser();
-        initCloudinary();
         initViews();
         loadUserData();
-    }
-
-    private void initCloudinary() {
-        try {
-            Map<String, String> config = new HashMap<>();
-            config.put("cloud_name", "dmygicxxy");
-            config.put("api_key", "172799859182813");
-            config.put("api_secret", "PAtcEgMVj8evo3bGG4oayayKf20");
-            MediaManager.init(this, config);
-        } catch (IllegalStateException ignored) {}
     }
 
     private void initViews() {
