@@ -53,6 +53,7 @@ import java.util.Objects;
 public class CameraActivity extends Activity implements View.OnClickListener {
     private static final String TAG = "CameraActivity";
     private static final int REQUEST_PERMISSIONS = 101;
+    private static final int SELECT_VIDEO_CODE = 102;
     
     private CameraManager manager;
     private FrameLayout cameraFrameLayout;
@@ -178,22 +179,24 @@ public class CameraActivity extends Activity implements View.OnClickListener {
     private boolean hasPermissions() {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
             return ContextCompat.checkSelfPermission(this, Manifest.permission.CAMERA) == PackageManager.PERMISSION_GRANTED &&
-                   ContextCompat.checkSelfPermission(this, Manifest.permission.RECORD_AUDIO) == PackageManager.PERMISSION_GRANTED;
+                   ContextCompat.checkSelfPermission(this, Manifest.permission.RECORD_AUDIO) == PackageManager.PERMISSION_GRANTED &&
+                   ContextCompat.checkSelfPermission(this, Manifest.permission.READ_MEDIA_VIDEO) == PackageManager.PERMISSION_GRANTED;
         } else {
             return ContextCompat.checkSelfPermission(this, Manifest.permission.CAMERA) == PackageManager.PERMISSION_GRANTED &&
                    ContextCompat.checkSelfPermission(this, Manifest.permission.RECORD_AUDIO) == PackageManager.PERMISSION_GRANTED &&
-                   ContextCompat.checkSelfPermission(this, Manifest.permission.WRITE_EXTERNAL_STORAGE) == PackageManager.PERMISSION_GRANTED;
+                   ContextCompat.checkSelfPermission(this, Manifest.permission.WRITE_EXTERNAL_STORAGE) == PackageManager.PERMISSION_GRANTED &&
+                   ContextCompat.checkSelfPermission(this, Manifest.permission.READ_EXTERNAL_STORAGE) == PackageManager.PERMISSION_GRANTED;
         }
     }
 
     private void requestPermissions() {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
             ActivityCompat.requestPermissions(this,
-                    new String[]{Manifest.permission.CAMERA, Manifest.permission.RECORD_AUDIO},
+                    new String[]{Manifest.permission.CAMERA, Manifest.permission.RECORD_AUDIO, Manifest.permission.READ_MEDIA_VIDEO},
                     REQUEST_PERMISSIONS);
         } else {
             ActivityCompat.requestPermissions(this,
-                    new String[]{Manifest.permission.CAMERA, Manifest.permission.RECORD_AUDIO, Manifest.permission.WRITE_EXTERNAL_STORAGE},
+                    new String[]{Manifest.permission.CAMERA, Manifest.permission.RECORD_AUDIO, Manifest.permission.WRITE_EXTERNAL_STORAGE, Manifest.permission.READ_EXTERNAL_STORAGE},
                     REQUEST_PERMISSIONS);
         }
     }
@@ -251,6 +254,25 @@ public class CameraActivity extends Activity implements View.OnClickListener {
             stopRecording();
         } else if (view.getId() == R.id.button_close) {
             finish();
+        } else if (view.getId() == R.id.btnUploadVideo) {
+            openGallery();
+        }
+    }
+
+    private void openGallery() {
+        Intent intent = new Intent(Intent.ACTION_GET_CONTENT);
+        intent.setType("video/*");
+        startActivityForResult(Intent.createChooser(intent, "Chọn video"), SELECT_VIDEO_CODE);
+    }
+
+    @Override
+    protected void onActivityResult(int requestCode, int resultCode, Intent data) {
+        super.onActivityResult(requestCode, resultCode, data);
+        if (resultCode == RESULT_OK && requestCode == SELECT_VIDEO_CODE && data != null) {
+            Uri selectedVideoUri = data.getData();
+            if (selectedVideoUri != null) {
+                startUploadingActivity(selectedVideoUri);
+            }
         }
     }
 
@@ -445,6 +467,8 @@ public class CameraActivity extends Activity implements View.OnClickListener {
     private void startUploadingActivity(Uri videoUri) {
         Intent i = new Intent(this, DescriptionVideoActivity.class);
         i.putExtra("videoUri", videoUri.toString());
+        i.setData(videoUri);
+        i.addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION);
         startActivity(i);
         finish();
     }

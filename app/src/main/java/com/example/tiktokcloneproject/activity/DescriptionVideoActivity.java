@@ -35,7 +35,11 @@ import com.google.firebase.auth.FirebaseAuth;
 import com.google.firebase.auth.FirebaseUser;
 import com.google.firebase.firestore.FirebaseFirestore;
 
+import java.io.File;
+import java.io.FileOutputStream;
 import java.io.IOException;
+import java.io.InputStream;
+import java.io.OutputStream;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.Map;
@@ -68,6 +72,7 @@ public class DescriptionVideoActivity extends FragmentActivity implements View.O
 
     private final ExecutorService executorService = Executors.newSingleThreadExecutor();
     private int lastProgress = -1;
+    private File tempUploadFile;
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -83,9 +88,15 @@ public class DescriptionVideoActivity extends FragmentActivity implements View.O
         db = FirebaseFirestore.getInstance();
 
         Intent intent = getIntent();
-        String videoPath = intent.getStringExtra("videoUri");
-        if (videoPath != null) {
-            videoUri = Uri.parse(videoPath);
+        videoUri = intent.getData();
+        if (videoUri == null) {
+            String videoPath = intent.getStringExtra("videoUri");
+            if (videoPath != null) {
+                videoUri = Uri.parse(videoPath);
+            }
+        }
+
+        if (videoUri != null) {
             loadVideoMetadata();
         } else {
             Toast.makeText(this, "Video not found!", Toast.LENGTH_SHORT).show();
@@ -162,7 +173,33 @@ public class DescriptionVideoActivity extends FragmentActivity implements View.O
     }
 
     private void uploadToCloudinary() {
-        MediaManager.get().upload(videoUri)
+        executorService.execute(() -> {
+            Uri uploadUri = videoUri;
+            
+            // Nếu là content URI (từ gallery), copy ra file tạm để tránh lỗi quyền truy cập
+            if ("content".equals(videoUri.getScheme())) {
+                try {
+                    tempUploadFile = new File(getCacheDir(), "upload_" + Id + ".mp4");
+                    copyUriToFile(videoUri, tempUploadFile);
+                    uploadUri = Uri.fromFile(tempUploadFile);
+                } catch (IOException e) {
+                    Log.e(TAG, "Error copying video to temp file", e);
+                    runOnUiThread(() -> {
+                        btnDescription.setEnabled(true);
+                        btnDescription.setText("Post");
+                        Toast.makeText(this, "Lỗi chuẩn bị video: " + e.getMessage(), Toast.LENGTH_SHORT).show();
+                    });
+                    return;
+                }
+            }
+
+            final Uri finalUri = uploadUri;
+            runOnUiThread(() -> performCloudinaryUpload(finalUri));
+        });
+    }
+
+    private void performCloudinaryUpload(Uri uriToUpload) {
+        MediaManager.get().upload(uriToUpload)
                 .option("resource_type", "video")
                 .option("public_id", "video_" + Id)
                 .callback(new UploadCallback() {
@@ -173,13 +210,20 @@ public class DescriptionVideoActivity extends FragmentActivity implements View.O
 
                     @Override
                     public void onProgress(String requestId, long bytes, long totalBytes) {
+                        if (totalBytes <= 0) return;
+                        
+                        // Tính toán % và giới hạn trong khoảng 0-100 để tránh số hiển thị loạn
                         int progress = (int) (100.0 * bytes / totalBytes);
-                        Log.d(TAG, "Upload progress: " + progress + "%");
-                        if (progress >= lastProgress + 5) {
+                        progress = Math.min(100, Math.max(0, progress));
+                        
+                        Log.d(TAG, "Upload progress: " + progress + "% (Bytes: " + bytes + "/" + totalBytes + ")");
+                        
+                        if (progress >= lastProgress + 1) { // Cập nhật mượt mà hơn với mỗi 1%
                             lastProgress = progress;
+                            final int currentProgress = progress;
                             runOnUiThread(() -> {
-                                btnDescription.setText("Uploading (" + progress + "%)");
-                                mBuilder.setProgress(100, progress, false);
+                                btnDescription.setText("Uploading (" + currentProgress + "%)");
+                                mBuilder.setProgress(100, currentProgress, false);
                                 notifyProgress();
                             });
                         }
@@ -188,23 +232,44 @@ public class DescriptionVideoActivity extends FragmentActivity implements View.O
                     @Override
                     @SuppressWarnings("rawtypes")
                     public void onSuccess(String requestId, Map resultData) {
+                        deleteTempFile();
                         String videoUrl = (String) resultData.get("secure_url");
                         saveToFirestore(videoUrl);
                     }
 
                     @Override
                     public void onError(String requestId, ErrorInfo error) {
-                        Log.e(TAG, "Cloudinary error: " + error.getDescription());
+                        deleteTempFile();
+                        String errorDesc = error != null ? error.getDescription() : "Unknown error";
+                        Log.e(TAG, "Cloudinary error: " + errorDesc);
                         runOnUiThread(() -> {
                             btnDescription.setEnabled(true);
                             btnDescription.setText("Post");
-                            Toast.makeText(DescriptionVideoActivity.this, "Upload failed!", Toast.LENGTH_SHORT).show();
+                            Toast.makeText(DescriptionVideoActivity.this, "Upload failed: " + errorDesc, Toast.LENGTH_LONG).show();
                         });
                     }
 
                     @Override
                     public void onReschedule(String requestId, ErrorInfo error) {}
                 }).dispatch();
+    }
+
+    private void deleteTempFile() {
+        if (tempUploadFile != null && tempUploadFile.exists()) {
+            tempUploadFile.delete();
+        }
+    }
+
+    private void copyUriToFile(Uri uri, File destFile) throws IOException {
+        try (InputStream in = getContentResolver().openInputStream(uri);
+             OutputStream out = new FileOutputStream(destFile)) {
+            if (in == null) throw new IOException("Failed to open input stream");
+            byte[] buf = new byte[8192];
+            int len;
+            while ((len = in.read(buf)) > 0) {
+                out.write(buf, 0, len);
+            }
+        }
     }
 
     private void saveToFirestore(String videoUrl) {
