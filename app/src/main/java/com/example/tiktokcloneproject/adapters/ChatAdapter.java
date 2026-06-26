@@ -57,12 +57,23 @@ public class ChatAdapter extends RecyclerView.Adapter<ChatAdapter.ChatViewHolder
             holder.llContainer.setGravity(Gravity.END);
             holder.llBubble.setBackgroundResource(R.drawable.btn_red_shape);
             holder.tvMessage.setTextColor(android.graphics.Color.WHITE);
-            holder.tvTime.setTextColor(android.graphics.Color.LTGRAY);
+            holder.tvTime.setTextColor(android.graphics.Color.parseColor("#E0E0E0"));
         } else {
             holder.llContainer.setGravity(Gravity.START);
             holder.llBubble.setBackgroundResource(R.drawable.btn_normal_shape);
-            holder.tvMessage.setTextColor(android.graphics.Color.BLACK);
-            holder.tvTime.setTextColor(android.graphics.Color.GRAY);
+            
+            // Kiểm tra Dark Mode để đặt màu chữ phù hợp (Trắng cho nền tối, Đen cho nền sáng)
+            boolean isDarkMode = (holder.itemView.getContext().getResources().getConfiguration().uiMode & 
+                                 android.content.res.Configuration.UI_MODE_NIGHT_MASK) == 
+                                 android.content.res.Configuration.UI_MODE_NIGHT_YES;
+            
+            if (isDarkMode) {
+                holder.tvMessage.setTextColor(android.graphics.Color.WHITE);
+                holder.tvTime.setTextColor(android.graphics.Color.parseColor("#CCCCCC"));
+            } else {
+                holder.tvMessage.setTextColor(android.graphics.Color.BLACK);
+                holder.tvTime.setTextColor(android.graphics.Color.DKGRAY);
+            }
         }
     }
 
