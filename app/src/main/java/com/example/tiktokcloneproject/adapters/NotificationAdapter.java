@@ -2,6 +2,7 @@ package com.example.tiktokcloneproject.adapters;
 
 import android.app.Activity;
 import android.content.Context;
+import android.graphics.Color;
 import android.view.LayoutInflater;
 import android.view.View;
 import android.view.ViewGroup;
@@ -17,6 +18,8 @@ import com.example.tiktokcloneproject.model.Notification;
 
 import java.util.ArrayList;
 
+import de.hdodenhof.circleimageview.CircleImageView;
+
 public class NotificationAdapter extends ArrayAdapter<Notification> {
 
     private ArrayList<Notification> notifications;
@@ -30,59 +33,55 @@ public class NotificationAdapter extends ArrayAdapter<Notification> {
 
     @Override
     public View getView(int position, @Nullable View convertView, ViewGroup parent) {
-        View row = convertView;
-
-        if (row == null) {
-            LayoutInflater inflater = ((Activity) context).getLayoutInflater();
-            row = inflater.inflate(R.layout.notification_row, null);
-
+        if (convertView == null) {
+            convertView = LayoutInflater.from(context).inflate(R.layout.notification_row, parent, false);
         }
 
-        TextView username = (TextView) row.findViewById(R.id.txvUsername);
-        TextView content = (TextView) row.findViewById(R.id.txvContent);
-        TextView time = (TextView) row.findViewById(R.id.txvTime);
+        Notification notification = notifications.get(position);
 
-        username.setText("@" + notifications.get(position).getFromUsername());
-        content.setText(handleAction(notifications.get(position).getAction()));
-        time.setText(handleTime(notifications.get(position).getTimestamp()));
+        CircleImageView ivIcon = convertView.findViewById(R.id.ivNotificationIcon);
+        TextView username = convertView.findViewById(R.id.txvUsername);
+        TextView content = convertView.findViewById(R.id.txvContent);
+        TextView time = convertView.findViewById(R.id.txvTime);
 
-        return (row);
+        username.setText("@" + notification.getFromUsername());
+        time.setText(handleTime(notification.getTimestamp()));
+        
+        // Thiết lập nội dung và Icon dựa trên hành động
+        setupActionUI(notification.getAction(), content, ivIcon);
+
+        return convertView;
     }
 
-    private String handleTime(long timeInMilliseconds) {
-        long difference_In_Time = System.currentTimeMillis() - timeInMilliseconds;
-        long difference_In_Minutes
-                = (difference_In_Time
-                / (1000 * 60));
-        long difference_In_Hours
-                = (difference_In_Time
-                / (1000 * 60 * 60));
-        long difference_In_Days
-                = (difference_In_Time
-                / (1000 * 60 * 60 * 24));
-        if(difference_In_Minutes <= 60) {
-            return difference_In_Minutes + "m";
-        }
-        else if(difference_In_Hours <= 24) {
-            return difference_In_Hours + "h";
-        }
-        else {
-            return difference_In_Days + "d";
-        }
-    }
-
-    private String handleAction(String action) {
+    private void setupActionUI(String action, TextView tvContent, CircleImageView ivIcon) {
         switch (action) {
-            case StaticVariable.COMMENT:
-                return context.getString(R.string.template_comment);
             case StaticVariable.FOLLOW:
-                return context.getString(R.string.template_follow);
+                tvContent.setText("bắt đầu follow bạn.");
+                ivIcon.setImageResource(R.drawable.ic_follow_notification);
+                ivIcon.setCircleBackgroundColor(Color.parseColor("#00C2FF"));
+                break;
             case StaticVariable.LIKE:
-                return context.getString(R.string.template_like);
+                tvContent.setText("đã thích video của bạn.");
+                ivIcon.setImageResource(R.drawable.ic_activity_notification);
+                ivIcon.setCircleBackgroundColor(Color.parseColor("#FF2C55"));
+                break;
+            case StaticVariable.COMMENT:
+                tvContent.setText("đã bình luận về video của bạn.");
+                ivIcon.setImageResource(R.drawable.ic_activity_notification);
+                ivIcon.setCircleBackgroundColor(Color.parseColor("#FF2C55"));
+                break;
         }
-        return "";
     }
 
+    private String handleTime(long timeMs) {
+        long diff = System.currentTimeMillis() - timeMs;
+        long minutes = diff / (1000 * 60);
+        long hours = diff / (1000 * 60 * 60);
+        long days = diff / (1000 * 60 * 60 * 24);
 
-
+        if (minutes < 1) return "vừa xong";
+        if (minutes < 60) return minutes + "ph";
+        if (hours < 24) return hours + "g";
+        return days + "n";
+    }
 }

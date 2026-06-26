@@ -1,6 +1,6 @@
 <resources xmlns:tools="http://schemas.android.com/tools">
     <!-- Base application theme. -->
-    <style name="Theme.TikTokCloneProject" parent="Theme.MaterialComponents.DayNight.DarkActionBar">
+    <style name="Theme.TikTokCloneProject" parent="Theme.MaterialComponents.DayNight.NoActionBar">
         <!-- Primary brand color. -->
         <item name="colorPrimary">@color/tiktok_white</item>
         <item name="colorPrimaryVariant">@color/tiktok_grey</item>
@@ -13,7 +13,11 @@
         <!-- Status bar color. -->
         <item name="android:statusBarColor">@color/tiktok_black</item>
         <item name="android:navigationBarColor" >@color/tiktok_black</item>
-        <!-- Customize your theme here. -->
+
+        <!-- Colors for Light Mode -->
+        <item name="colorSurface">@color/white</item>
+        <item name="colorOnSurface">@color/black</item>
+        <item name="android:windowBackground">?attr/colorSurface</item>
     </style>
 
     <style name="Theme.TikTokCloneProject.Fullscreen" parent="Theme.TikTokCloneProject">

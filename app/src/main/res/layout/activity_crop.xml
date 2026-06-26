@@ -49,44 +49,6 @@
         android:padding="16dp"
         android:background="@color/white">
 
-        <RelativeLayout
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:layout_marginBottom="24dp">
-
-            <CheckBox
-                android:id="@+id/cbPostToStory"
-                android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
-                android:buttonTint="@color/tiktok_red"
-                android:checked="true"
-                android:text="Đăng ảnh này lên Nhật ký"
-                android:textColor="@color/black"
-                android:textSize="14sp" />
-
-            <LinearLayout
-                android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
-                android:layout_alignParentEnd="true"
-                android:layout_centerVertical="true"
-                android:gravity="center_vertical"
-                android:orientation="horizontal">
-
-                <TextView
-                    android:layout_width="wrap_content"
-                    android:layout_height="wrap_content"
-                    android:text="Xem trước"
-                    android:textColor="@color/tiktok_grey"
-                    android:textSize="14sp" />
-
-                <ImageView
-                    android:layout_width="16dp"
-                    android:layout_height="16dp"
-                    android:src="@drawable/ic_baseline_keyboard_arrow_right_24"
-                    app:tint="@color/tiktok_grey" />
-            </LinearLayout>
-        </RelativeLayout>
-
         <LinearLayout
             android:layout_width="match_parent"
             android:layout_height="48dp"
@@ -110,7 +72,7 @@
                 android:layout_marginStart="8dp"
                 android:layout_weight="1"
                 android:background="@drawable/btn_red_shape"
-                android:text="Lưu và đăng"
+                android:text="Lưu"
                 android:textAllCaps="false"
                 android:textColor="@color/white" />
         </LinearLayout>

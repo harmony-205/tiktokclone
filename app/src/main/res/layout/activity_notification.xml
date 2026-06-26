@@ -31,19 +31,24 @@
             android:textSize="18sp" />
     </RelativeLayout>
 
-    <ListView
-        android:id="@+id/lvNotifications"
+    <FrameLayout
         android:layout_width="match_parent"
-        android:layout_height="match_parent"
-        android:divider="@null" />
+        android:layout_height="match_parent">
 
-    <TextView
-        android:id="@+id/tvEmpty"
-        android:layout_width="match_parent"
-        android:layout_height="match_parent"
-        android:gravity="center"
-        android:text="Chưa có thông báo nào"
-        android:textColor="#8A8A8E"
-        android:visibility="gone" />
+        <ListView
+            android:id="@+id/lvNotifications"
+            android:layout_width="match_parent"
+            android:layout_height="match_parent"
+            android:divider="@null" />
+
+        <TextView
+            android:id="@+id/tvEmpty"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_gravity="center"
+            android:text="Chưa có thông báo nào"
+            android:textColor="#8A8A8E"
+            android:visibility="gone" />
+    </FrameLayout>
 
 </LinearLayout>

@@ -127,13 +127,6 @@ public class EditProfileActivity extends Activity implements View.OnClickListene
                 if (avatarUri != null) {
                     Glide.with(this).load(avatarUri).circleCrop().into(imbPhoto);
                     uploadAvatarToCloudinary();
-                    
-                    // Logic for "Post to Story" if selected in CropActivity
-                    boolean postToStory = data.getBooleanExtra("post_to_story", false);
-                    if (postToStory) {
-                        // Implement posting to story here
-                        Toast.makeText(this, "Posting to story...", Toast.LENGTH_SHORT).show();
-                    }
                 }
             }
         } else if (resultCode == UCrop.RESULT_ERROR) {

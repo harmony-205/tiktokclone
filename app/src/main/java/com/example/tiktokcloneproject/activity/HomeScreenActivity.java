@@ -1,10 +1,9 @@
 package com.example.tiktokcloneproject.activity;
 
-
 import androidx.annotation.Nullable;
 import androidx.appcompat.app.AlertDialog;
+import androidx.appcompat.app.AppCompatActivity;
 import androidx.fragment.app.Fragment;
-import androidx.fragment.app.FragmentActivity;
 import androidx.fragment.app.FragmentTransaction;
 
 import android.content.Context;
@@ -25,7 +24,7 @@ import com.google.firebase.auth.FirebaseAuth;
 import com.google.firebase.auth.FirebaseUser;
 import com.google.firebase.firestore.FirebaseFirestore;
 
-public class HomeScreenActivity extends FragmentActivity implements View.OnClickListener{
+public class HomeScreenActivity extends AppCompatActivity implements View.OnClickListener{
 
     FragmentTransaction ft;
     VideoFragment videoFragment;
@@ -47,6 +46,11 @@ public class HomeScreenActivity extends FragmentActivity implements View.OnClick
         setTheme(R.style.Theme_TikTokCloneProject);
         super.onCreate(savedInstanceState);
         setContentView(R.layout.activity_home_screen);
+        
+        if (getSupportActionBar() != null) {
+            getSupportActionBar().hide();
+        }
+
         fragmentIntent = getIntent();
         ft = getSupportFragmentManager().beginTransaction();
 

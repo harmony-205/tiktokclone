@@ -1,9 +1,9 @@
 package com.example.tiktokcloneproject.activity;
 
 import androidx.annotation.NonNull;
+import androidx.appcompat.app.AppCompatActivity;
 import androidx.viewpager2.widget.ViewPager2;
 
-import android.app.Activity;
 import android.content.Intent;
 import android.net.Uri;
 import android.os.Bundle;
@@ -22,7 +22,7 @@ import com.google.firebase.firestore.FirebaseFirestore;
 import java.util.ArrayList;
 import java.util.List;
 
-public class VideoActivity extends Activity {
+public class VideoActivity extends AppCompatActivity {
     private String videoId;
     private FirebaseFirestore db;
     private ViewPager2 viewPager2;
@@ -35,6 +35,10 @@ public class VideoActivity extends Activity {
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
         setContentView(R.layout.activity_video);
+
+        if (getSupportActionBar() != null) {
+            getSupportActionBar().hide();
+        }
 
         Intent intent = getIntent();
         Bundle bundle = intent.getExtras();

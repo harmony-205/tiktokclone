@@ -2,7 +2,7 @@ package com.example.tiktokcloneproject.activity;
 
 import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
-import androidx.fragment.app.FragmentActivity;
+import androidx.appcompat.app.AppCompatActivity;
 import androidx.recyclerview.widget.GridLayoutManager;
 import androidx.recyclerview.widget.RecyclerView;
 
@@ -60,7 +60,7 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 
-public class ProfileActivity extends FragmentActivity implements View.OnClickListener {
+public class ProfileActivity extends AppCompatActivity implements View.OnClickListener {
     private TextView txvFollowing, txvFollowers, txvLikes, txvUserName;
     private EditText edtBio;
     private Button btnEditProfile, btnUpdateBio, btnCancelUpdateBio, btnMessage;
@@ -83,6 +83,10 @@ public class ProfileActivity extends FragmentActivity implements View.OnClickLis
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
         setContentView(R.layout.activity_profile);
+
+        if (getSupportActionBar() != null) {
+            getSupportActionBar().hide();
+        }
         
         mAuth = FirebaseAuth.getInstance();
         user = mAuth.getCurrentUser();
@@ -113,7 +117,6 @@ public class ProfileActivity extends FragmentActivity implements View.OnClickLis
         GridLayoutManager gridLayoutManager = new GridLayoutManager(this, 3);
         recVideoSummary.setLayoutManager(gridLayoutManager);
         recVideoSummary.addItemDecoration(new GridSpacingItemDecoration(3, 10, true));
-        // setVideoSummaries(); // Removed as we use real-time listener now
         setLikes(userId);
     }
 
@@ -132,11 +135,11 @@ public class ProfileActivity extends FragmentActivity implements View.OnClickLis
         btnUpdateBio = findViewById(R.id.btn_update_bio);
         btnCancelUpdateBio = findViewById(R.id.btn_cancel_update_bio);
 
-        btnUpdateBio.setOnClickListener(this);
-        btnCancelUpdateBio.setOnClickListener(this);
-        llFollowers.setOnClickListener(this);
-        llFollowing.setOnClickListener(this);
-        imvAvatarProfile.setOnClickListener(this);
+        if (btnUpdateBio != null) btnUpdateBio.setOnClickListener(this);
+        if (btnCancelUpdateBio != null) btnCancelUpdateBio.setOnClickListener(this);
+        if (llFollowers != null) llFollowers.setOnClickListener(this);
+        if (llFollowing != null) llFollowing.setOnClickListener(this);
+        if (imvAvatarProfile != null) imvAvatarProfile.setOnClickListener(this);
         if (btnMessage != null) btnMessage.setOnClickListener(this);
     }
 
@@ -144,14 +147,16 @@ public class ProfileActivity extends FragmentActivity implements View.OnClickLis
         if (user != null) {
             currentUserID = user.getUid();
             if (userId.equals(currentUserID)) {
-                btnEditProfile.setVisibility(View.VISIBLE);
-                edtBio.setVisibility(View.VISIBLE);
-                oldBioText = edtBio.getText().toString();
-                
-                edtBio.setOnFocusChangeListener((view, hasFocus) -> {
-                    findViewById(R.id.layout_bio).setVisibility(hasFocus ? View.VISIBLE : View.GONE);
-                });
-                btnEditProfile.setOnClickListener(this);
+                if (btnEditProfile != null) btnEditProfile.setVisibility(View.VISIBLE);
+                if (edtBio != null) {
+                    edtBio.setVisibility(View.VISIBLE);
+                    oldBioText = edtBio.getText().toString();
+                    edtBio.setOnFocusChangeListener((view, hasFocus) -> {
+                        View layoutBio = findViewById(R.id.layout_bio);
+                        if (layoutBio != null) layoutBio.setVisibility(hasFocus ? View.VISIBLE : View.GONE);
+                    });
+                }
+                if (btnEditProfile != null) btnEditProfile.setOnClickListener(this);
             } else {
                 handleFollow();
                 if (btnMessage != null) btnMessage.setVisibility(View.VISIBLE);
@@ -179,9 +184,9 @@ public class ProfileActivity extends FragmentActivity implements View.OnClickLis
         profileListener = profileDocRef.addSnapshotListener((document, e) -> {
             if (e != null) return;
             if (document != null && document.exists()) {
-                txvFollowing.setText(String.valueOf(document.getLong("following") != null ? document.getLong("following") : 0));
-                txvFollowers.setText(String.valueOf(document.getLong("followers") != null ? document.getLong("followers") : 0));
-                txvLikes.setText(String.valueOf(document.getLong("likes") != null ? document.getLong("likes") : 0));
+                if (txvFollowing != null) txvFollowing.setText(String.valueOf(document.getLong("following") != null ? document.getLong("following") : 0));
+                if (txvFollowers != null) txvFollowers.setText(String.valueOf(document.getLong("followers") != null ? document.getLong("followers") : 0));
+                if (txvLikes != null) txvLikes.setText(String.valueOf(document.getLong("likes") != null ? document.getLong("likes") : 0));
             }
         });
 
@@ -189,7 +194,7 @@ public class ProfileActivity extends FragmentActivity implements View.OnClickLis
             if (e != null) return;
             if (document != null && document.exists()) {
                 username = document.getString("username");
-                txvUserName.setText("@" + username);
+                if (txvUserName != null) txvUserName.setText("@" + username);
                 String avatarUrl = document.getString("avatarUrl");
                 
                 if (avatarUrl != null) {
@@ -199,7 +204,6 @@ public class ProfileActivity extends FragmentActivity implements View.OnClickLis
             }
         });
 
-        // Real-time videos and likes update
         videosListener = db.collection("profiles").document(userId).collection("public_videos")
                 .addSnapshotListener((snapshots, e) -> {
                     if (e != null || snapshots == null) return;
@@ -222,7 +226,7 @@ public class ProfileActivity extends FragmentActivity implements View.OnClickLis
                     
                     if (likesCount != totalLikes) {
                         totalLikes = likesCount;
-                        txvLikes.setText(String.valueOf(totalLikes));
+                        if (txvLikes != null) txvLikes.setText(String.valueOf(totalLikes));
                         profileDocRef.update("likes", totalLikes);
                     }
                 });
@@ -246,6 +250,7 @@ public class ProfileActivity extends FragmentActivity implements View.OnClickLis
 
     private void handleFollow() {
         Button btnFollow = findViewById(R.id.button_follow);
+        if (btnFollow == null) return;
         btnFollow.setVisibility(View.VISIBLE);
 
         if (user != null) {
@@ -293,16 +298,16 @@ public class ProfileActivity extends FragmentActivity implements View.OnClickLis
 
     public void notifyFollow() {
         if (user == null) return;
-        userDocRef.get().addOnSuccessListener(document -> {
+        // LẤY TÊN NGƯỜI NHẤN FOLLOW (NGƯỜI ĐANG ĐĂNG NHẬP)
+        db.collection("users").document(user.getUid()).get().addOnSuccessListener(document -> {
             if (document.exists()) {
-                String username = document.getString("username");
-                Notification.pushNotification(username, userId, StaticVariable.FOLLOW);
+                String currentUsername = document.getString("username");
+                // GỬI THÔNG BÁO CHO NGƯỜI CHỦ PROFILE (userId)
+                Notification.pushNotification(currentUsername, userId, StaticVariable.FOLLOW);
             }
         });
     }
 
-    // This method is now handled by the real-time listener in startListeningToData()
-    // but kept for initial load or manual refresh if needed.
     public void setLikes(String userId) {
         db.collection("profiles").document(userId).collection("public_videos").get().addOnSuccessListener(queryDocumentSnapshots -> {
             int likesCount = 0;
@@ -313,7 +318,7 @@ public class ProfileActivity extends FragmentActivity implements View.OnClickLis
                 }
             }
             totalLikes = likesCount;
-            txvLikes.setText(String.valueOf(totalLikes));
+            if (txvLikes != null) txvLikes.setText(String.valueOf(totalLikes));
             db.collection("profiles").document(userId).update("likes", totalLikes);
         });
     }
@@ -353,13 +358,17 @@ public class ProfileActivity extends FragmentActivity implements View.OnClickLis
         } else if (id == R.id.btnBackProfile) {
             finish();
         } else if (id == R.id.btn_update_bio) {
-            profileDocRef.update("bio", edtBio.getText().toString());
-            oldBioText = edtBio.getText().toString();
-            findViewById(R.id.layout_bio).setVisibility(View.GONE);
+            if (edtBio != null) {
+                profileDocRef.update("bio", edtBio.getText().toString());
+                oldBioText = edtBio.getText().toString();
+            }
+            View layoutBio = findViewById(R.id.layout_bio);
+            if (layoutBio != null) layoutBio.setVisibility(View.GONE);
             hideKeyboard();
         } else if (id == R.id.btn_cancel_update_bio) {
-            edtBio.setText(oldBioText);
-            findViewById(R.id.layout_bio).setVisibility(View.GONE);
+            if (edtBio != null) edtBio.setText(oldBioText);
+            View layoutBio = findViewById(R.id.layout_bio);
+            if (layoutBio != null) layoutBio.setVisibility(View.GONE);
             hideKeyboard();
         } else if (id == R.id.ll_followers || id == R.id.ll_following) {
             Intent intent = new Intent(ProfileActivity.this, FollowListActivity.class);
@@ -393,7 +402,7 @@ public class ProfileActivity extends FragmentActivity implements View.OnClickLis
         if (currentAvatarUrl != null) {
             Glide.with(this).load(currentAvatarUrl).placeholder(R.drawable.default_avatar).circleCrop().into(imvAvatar);
         }
-        txvName.setText(txvUserName.getText());
+        if (txvUserName != null) txvName.setText(txvUserName.getText());
 
         dialog.findViewById(R.id.btnCopyURL).setOnClickListener(v -> {
             ClipboardManager clipboard = (ClipboardManager) getSystemService(Context.CLIPBOARD_SERVICE);

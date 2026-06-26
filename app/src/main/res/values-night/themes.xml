@@ -1,18 +1,25 @@
 <resources xmlns:tools="http://schemas.android.com/tools">
     <!-- Base application theme. -->
-    <style name="Theme.TikTokCloneProject" parent="Theme.MaterialComponents.DayNight.DarkActionBar">
+    <style name="Theme.TikTokCloneProject" parent="Theme.MaterialComponents.DayNight.NoActionBar">
         <!-- Primary brand color. -->
         <item name="colorPrimary">@color/tiktok_black</item>
         <item name="colorPrimaryVariant">@color/tiktok_white</item>
         <item name="colorOnPrimary">@color/white</item>
+
+        <!-- Surface colors (Background và Text) -->
+        <item name="colorSurface">@color/black</item>
+        <item name="colorOnSurface">@color/white</item>
+        <item name="android:windowBackground">?attr/colorSurface</item>
+
         <!-- Secondary brand color. -->
         <item name="colorSecondary">@color/tiktok_red</item>
         <item name="colorSecondaryVariant">@color/tiktok_red</item>
         <item name="colorOnSecondary">@color/white</item>
+
         <!-- Status bar color. -->
         <item name="android:statusBarColor">@color/tiktok_black</item>
-        <item name="android:navigationBarColor" >@color/tiktok_black</item>
-        <!-- Customize your theme here. -->
+        <item name="android:navigationBarColor">@color/tiktok_black</item>
+        <item name="android:windowLightStatusBar">false</item>
     </style>
 
     <style name="ThemeOverlay.TikTokCloneProject.FullscreenContainer" parent="">

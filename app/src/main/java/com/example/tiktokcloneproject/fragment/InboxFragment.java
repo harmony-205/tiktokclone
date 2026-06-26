@@ -24,16 +24,13 @@ import com.example.tiktokcloneproject.model.Conversation;
 import com.example.tiktokcloneproject.model.Notification;
 import com.google.firebase.auth.FirebaseAuth;
 import com.google.firebase.auth.FirebaseUser;
-import com.google.firebase.database.DataSnapshot;
-import com.google.firebase.database.DatabaseError;
-import com.google.firebase.database.DatabaseReference;
-import com.google.firebase.database.FirebaseDatabase;
-import com.google.firebase.database.ValueEventListener;
 import com.google.firebase.firestore.DocumentChange;
 import com.google.firebase.firestore.FirebaseFirestore;
+import com.google.firebase.firestore.ListenerRegistration;
 import com.google.firebase.firestore.Query;
 
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.List;
 
 public class InboxFragment extends Fragment {
@@ -44,8 +41,8 @@ public class InboxFragment extends Fragment {
     private FirebaseFirestore db;
     private FirebaseUser currentUser;
     private View blankInbox;
-    private TextView tvFollowerCount, tvActivityCount;
-    private DatabaseReference mNotificationDatabase;
+    private TextView tvFollowerCount, tvActivityCount, tvFollowerPreview, tvActivityPreview;
+    private ListenerRegistration notificationListener;
 
     public static InboxFragment newInstance(String strArg) {
         InboxFragment fragment = new InboxFragment();
@@ -69,6 +66,8 @@ public class InboxFragment extends Fragment {
         blankInbox = view.findViewById(R.id.blank_inbox);
         tvFollowerCount = view.findViewById(R.id.tvFollowerCount);
         tvActivityCount = view.findViewById(R.id.tvActivityCount);
+        tvFollowerPreview = view.findViewById(R.id.tvFollowerPreview);
+        tvActivityPreview = view.findViewById(R.id.tvActivityPreview);
 
         db = FirebaseFirestore.getInstance();
         currentUser = FirebaseAuth.getInstance().getCurrentUser();
@@ -79,7 +78,6 @@ public class InboxFragment extends Fragment {
             setupNotificationListeners();
         }
 
-        // Click listeners for Followers and Activities
         view.findViewById(R.id.rlFollowers).setOnClickListener(v -> {
             Intent intent = new Intent(context, NotificationActivity.class);
             intent.putExtra("mode", "follower");
@@ -102,32 +100,56 @@ public class InboxFragment extends Fragment {
     }
 
     private void setupNotificationListeners() {
-        mNotificationDatabase = FirebaseDatabase.getInstance().getReference().child(currentUser.getUid());
-        mNotificationDatabase.addValueEventListener(new ValueEventListener() {
-            @Override
-            public void onDataChange(@NonNull DataSnapshot snapshot) {
-                int followerCount = 0;
-                int activityCount = 0;
-                for (DataSnapshot ds : snapshot.getChildren()) {
-                    Notification notification = ds.getValue(Notification.class);
-                    if (notification != null) {
-                        if (StaticVariable.FOLLOW.equals(notification.getAction())) {
-                            followerCount++;
-                        } else if (StaticVariable.LIKE.equals(notification.getAction()) ||
-                                   StaticVariable.COMMENT.equals(notification.getAction())) {
-                            activityCount++;
+        if (currentUser == null) return;
+
+        // Truy vấn đơn giản nhất: Chỉ lọc theo toUserId. Sắp xếp thực hiện trong Java để tránh lỗi Index.
+        notificationListener = db.collection("notifications")
+                .whereEqualTo("toUserId", currentUser.getUid())
+                .addSnapshotListener((value, error) -> {
+                    if (error != null) {
+                        Log.e("InboxFragment", "Lỗi Firestore: " + error.getMessage());
+                        return;
+                    }
+
+                    if (value != null) {
+                        int followerCount = 0;
+                        int activityCount = 0;
+                        
+                        List<Notification> followers = new ArrayList<>();
+                        List<Notification> activities = new ArrayList<>();
+
+                        for (com.google.firebase.firestore.QueryDocumentSnapshot doc : value) {
+                            Notification n = doc.toObject(Notification.class);
+                            if (StaticVariable.FOLLOW.equals(n.getAction())) {
+                                followerCount++;
+                                followers.add(n);
+                            } else if (StaticVariable.LIKE.equals(n.getAction()) || StaticVariable.COMMENT.equals(n.getAction())) {
+                                activityCount++;
+                                activities.add(n);
+                            }
+                        }
+
+                        updateBadge(tvFollowerCount, followerCount);
+                        updateBadge(tvActivityCount, activityCount);
+
+                        // Sắp xếp để lấy thông báo mới nhất hiện Preview
+                        if (!followers.isEmpty()) {
+                            Collections.sort(followers, (n1, n2) -> Long.compare(n2.getTimestamp(), n1.getTimestamp()));
+                            tvFollowerPreview.setText("@" + followers.get(0).getFromUsername() + " đã bắt đầu follow bạn.");
+                        } else {
+                            tvFollowerPreview.setText("Xem ai vừa bắt đầu follow bạn");
+                        }
+                        
+                        if (!activities.isEmpty()) {
+                            Collections.sort(activities, (n1, n2) -> Long.compare(n2.getTimestamp(), n1.getTimestamp()));
+                            Notification latest = activities.get(0);
+                            String act = StaticVariable.LIKE.equals(latest.getAction()) ? " đã thích video của bạn." : " đã bình luận về video.";
+                            tvActivityPreview.setText("@" + latest.getFromUsername() + act);
+                        } else {
+                            tvActivityPreview.setText("Thích, bình luận và nhắc đến");
                         }
                     }
-                }
-
-                updateBadge(tvFollowerCount, followerCount);
-                updateBadge(tvActivityCount, activityCount);
-            }
-
-            @Override
-            public void onCancelled(@NonNull DatabaseError error) {
-            }
-        });
+                });
     }
 
     private void updateBadge(TextView tv, int count) {
@@ -143,19 +165,13 @@ public class InboxFragment extends Fragment {
         db.collection("conversations")
                 .orderBy("timestamp", Query.Direction.DESCENDING)
                 .addSnapshotListener((value, error) -> {
-                    if (error != null) {
-                        Log.e("InboxFragment", "Error listening for conversations", error);
-                        return;
-                    }
-
+                    if (error != null) return;
                     if (value != null) {
                         for (DocumentChange dc : value.getDocumentChanges()) {
                             ChatMessage lastMsg = dc.getDocument().toObject(ChatMessage.class);
                             String chatId = dc.getDocument().getId();
-
                             if (chatId.contains(currentUser.getUid())) {
                                 String otherUserId = chatId.replace(currentUser.getUid(), "").replace("_", "");
-                                
                                 switch (dc.getType()) {
                                     case ADDED:
                                     case MODIFIED:
@@ -167,7 +183,6 @@ public class InboxFragment extends Fragment {
                                 }
                             }
                         }
-                        
                         blankInbox.setVisibility(conversationList.isEmpty() ? View.VISIBLE : View.GONE);
                     }
                 });
@@ -178,31 +193,17 @@ public class InboxFragment extends Fragment {
             if (documentSnapshot.exists()) {
                 String username = documentSnapshot.getString("username");
                 String avatarUrl = documentSnapshot.getString("avatarUrl");
-
                 long timestamp = (lastMsg.getTimestamp() != null) ? lastMsg.getTimestamp().getTime() : System.currentTimeMillis();
-
-                Conversation conversation = new Conversation(
-                        chatId,
-                        lastMsg.getMessage(),
-                        timestamp,
-                        otherUserId,
-                        username,
-                        avatarUrl
-                );
+                Conversation conversation = new Conversation(chatId, lastMsg.getMessage(), timestamp, otherUserId, username, avatarUrl);
 
                 int index = -1;
                 for (int i = 0; i < conversationList.size(); i++) {
                     if (conversationList.get(i).getChatId().equals(chatId)) {
-                        index = i;
-                        break;
+                        index = i; break;
                     }
                 }
-
-                if (index != -1) {
-                    conversationList.set(index, conversation);
-                } else {
-                    conversationList.add(0, conversation);
-                }
+                if (index != -1) conversationList.set(index, conversation);
+                else conversationList.add(0, conversation);
                 
                 conversationList.sort((c1, c2) -> Long.compare(c2.getTimestamp(), c1.getTimestamp()));
                 conversationAdapter.notifyDataSetChanged();
@@ -219,8 +220,12 @@ public class InboxFragment extends Fragment {
                 break;
             }
         }
-        if (conversationList.isEmpty()) {
-            blankInbox.setVisibility(View.VISIBLE);
-        }
+        if (conversationList.isEmpty()) blankInbox.setVisibility(View.VISIBLE);
+    }
+
+    @Override
+    public void onDestroyView() {
+        super.onDestroyView();
+        if (notificationListener != null) notificationListener.remove();
     }
 }

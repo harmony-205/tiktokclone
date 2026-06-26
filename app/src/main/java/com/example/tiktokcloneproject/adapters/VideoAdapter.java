@@ -8,15 +8,22 @@ import android.graphics.Matrix;
 import android.os.Bundle;
 import android.os.Handler;
 import android.os.Looper;
+import android.text.SpannableString;
+import android.text.Spanned;
+import android.text.TextPaint;
+import android.text.method.LinkMovementMethod;
+import android.text.style.ClickableSpan;
 import android.view.LayoutInflater;
 import android.view.TextureView;
 import android.view.View;
 import android.view.ViewGroup;
 import android.widget.ImageView;
+import android.widget.LinearLayout;
 import android.widget.TextView;
 import android.widget.Toast;
 
 import androidx.annotation.NonNull;
+import androidx.appcompat.app.AlertDialog;
 import androidx.recyclerview.widget.RecyclerView;
 
 import com.bumptech.glide.Glide;
@@ -24,6 +31,7 @@ import com.bumptech.glide.load.engine.DiskCacheStrategy;
 import com.example.tiktokcloneproject.R;
 import com.example.tiktokcloneproject.activity.CommentActivity;
 import com.example.tiktokcloneproject.activity.ProfileActivity;
+import com.example.tiktokcloneproject.activity.SearchActivity;
 import com.example.tiktokcloneproject.helper.OnSwipeTouchListener;
 import com.example.tiktokcloneproject.helper.StaticVariable;
 import com.example.tiktokcloneproject.model.Notification;
@@ -35,6 +43,8 @@ import com.google.android.exoplayer2.Player;
 import com.google.android.exoplayer2.ui.AspectRatioFrameLayout;
 import com.google.android.exoplayer2.ui.StyledPlayerView;
 import com.google.android.exoplayer2.video.VideoSize;
+import com.google.android.material.bottomsheet.BottomSheetDialog;
+import com.google.firebase.auth.FirebaseAuth;
 import com.google.firebase.auth.FirebaseUser;
 import com.google.firebase.firestore.DocumentReference;
 import com.google.firebase.firestore.FieldValue;
@@ -43,6 +53,8 @@ import com.google.firebase.firestore.FirebaseFirestore;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
 
 public class VideoAdapter extends RecyclerView.Adapter<VideoAdapter.VideoViewHolder> {
     private List<Video> videos;
@@ -50,6 +62,7 @@ public class VideoAdapter extends RecyclerView.Adapter<VideoAdapter.VideoViewHol
     private static FirebaseUser user = null;
     private int currentPosition = 0;
     private RecyclerView recyclerView;
+    private static boolean isMuted = false;
 
     public VideoAdapter(Context context, List<Video> videos) {
         this.context = context;
@@ -131,9 +144,11 @@ public class VideoAdapter extends RecyclerView.Adapter<VideoAdapter.VideoViewHol
 
     public void releaseAll() {
         if (recyclerView != null) {
-            for (int i = 0; i < getItemCount(); i++) {
-                VideoViewHolder holder = (VideoViewHolder) recyclerView.findViewHolderForAdapterPosition(i);
-                if (holder != null) holder.releasePlayer();
+            for (int i = 0; i < recyclerView.getChildCount(); i++) {
+                VideoViewHolder holder = (VideoViewHolder) recyclerView.getChildViewHolder(recyclerView.getChildAt(i));
+                if (holder != null) {
+                    holder.releasePlayer();
+                }
             }
         }
     }
@@ -141,7 +156,7 @@ public class VideoAdapter extends RecyclerView.Adapter<VideoAdapter.VideoViewHol
     public class VideoViewHolder extends RecyclerView.ViewHolder {
         StyledPlayerView videoView;
         ExoPlayer exoPlayer;
-        ImageView imvAvatar, imvShare, imvMore, imvLike, imvComment;
+        ImageView imvAvatar, imvShare, imvMore, imvLike, imvComment, imvVolume;
         TextView tvTitle, txvDescription, tvCommentCount, tvLikeCount, tvShareCount;
         FirebaseFirestore db;
         boolean isLiked = false;
@@ -164,17 +179,111 @@ public class VideoAdapter extends RecyclerView.Adapter<VideoAdapter.VideoViewHol
             imvMore = itemView.findViewById(R.id.imvMore);
             imvLike = itemView.findViewById(R.id.imvLike);
             imvComment = itemView.findViewById(R.id.imvComment);
+            imvVolume = itemView.findViewById(R.id.imvVolume);
 
             db = FirebaseFirestore.getInstance();
             videoView.setResizeMode(AspectRatioFrameLayout.RESIZE_MODE_ZOOM);
 
             if (imvMore != null) {
-                imvMore.setOnClickListener(v -> Toast.makeText(context, "More options", Toast.LENGTH_SHORT).show());
+                imvMore.setOnClickListener(v -> {
+                    int pos = getBindingAdapterPosition();
+                    if (pos != RecyclerView.NO_POSITION) {
+                        showMoreOptions(videos.get(pos), pos);
+                    }
+                });
+            }
+
+            if (imvVolume != null) {
+                imvVolume.setOnClickListener(v -> toggleVolume());
             }
 
             videoView.setOnTouchListener(new OnSwipeTouchListener(itemView.getContext()) {
                 @Override public void onSwipeLeft() {}
             });
+        }
+
+        private void showMoreOptions(Video video, int position) {
+            BottomSheetDialog bottomSheetDialog = new BottomSheetDialog(context);
+            View view = LayoutInflater.from(context).inflate(R.layout.video_options_bottom_sheet, null);
+            bottomSheetDialog.setContentView(view);
+
+            LinearLayout llDelete = view.findViewById(R.id.llDeleteVideo);
+            View divider = view.findViewById(R.id.dividerDelete);
+            LinearLayout llSave = view.findViewById(R.id.llSaveVideo);
+
+            FirebaseUser currentUser = FirebaseAuth.getInstance().getCurrentUser();
+            if (currentUser != null && currentUser.getUid().equals(video.getAuthorId())) {
+                llDelete.setVisibility(View.VISIBLE);
+                divider.setVisibility(View.VISIBLE);
+            } else {
+                llDelete.setVisibility(View.GONE);
+                divider.setVisibility(View.GONE);
+            }
+
+            llDelete.setOnClickListener(v -> {
+                bottomSheetDialog.dismiss();
+                confirmDeleteVideo(video, position);
+            });
+
+            llSave.setOnClickListener(v -> {
+                bottomSheetDialog.dismiss();
+                Toast.makeText(context, "Saving video...", Toast.LENGTH_SHORT).show();
+            });
+
+            bottomSheetDialog.show();
+        }
+
+        private void confirmDeleteVideo(Video video, int position) {
+            new AlertDialog.Builder(context)
+                    .setTitle("Delete Video")
+                    .setMessage("Are you sure you want to delete this video?")
+                    .setPositiveButton("Delete", (dialog, which) -> deleteVideo(video, position))
+                    .setNegativeButton("Cancel", null)
+                    .show();
+        }
+
+        private void deleteVideo(Video video, int position) {
+            String videoId = video.getVideoId();
+            String authorId = video.getAuthorId();
+
+            db.collection("videos").document(videoId).delete();
+
+            db.collection("profiles").document(authorId).collection("public_videos").document(videoId).delete()
+                    .addOnSuccessListener(aVoid -> {
+                        deleteHashtags(video.getDescription(), videoId);
+                        videos.remove(position);
+                        notifyItemRemoved(position);
+                        Toast.makeText(context, "Video deleted successfully", Toast.LENGTH_SHORT).show();
+                    })
+                    .addOnFailureListener(e -> Toast.makeText(context, "Failed to delete video", Toast.LENGTH_SHORT).show());
+        }
+
+        private void deleteHashtags(String description, String videoId) {
+            if (description == null || description.isEmpty()) return;
+            Pattern pattern = Pattern.compile("#([A-Za-z0-9_-]+)");
+            Matcher matcher = pattern.matcher(description);
+            while (matcher.find()) {
+                String hashtag = matcher.group(0);
+                db.collection("hashtags").document(hashtag).collection("video_summaries").document(videoId).delete();
+            }
+        }
+
+        private void toggleVolume() {
+            isMuted = !isMuted;
+            applyVolumeToPlayer();
+            updateVolumeIcon();
+        }
+
+        private void applyVolumeToPlayer() {
+            if (exoPlayer != null) {
+                exoPlayer.setVolume(isMuted ? 0f : 1f);
+            }
+        }
+
+        private void updateVolumeIcon() {
+            if (imvVolume != null) {
+                imvVolume.setImageResource(isMuted ? R.drawable.ic_baseline_volume_off_24 : R.drawable.ic_baseline_volume_up_24);
+            }
         }
 
         public void updateCounts(Video video) {
@@ -189,6 +298,8 @@ public class VideoAdapter extends RecyclerView.Adapter<VideoAdapter.VideoViewHol
             if (exoPlayer != null) {
                 exoPlayer.setPlayWhenReady(true);
                 exoPlayer.play();
+                applyVolumeToPlayer();
+                updateVolumeIcon();
                 
                 videoView.setResizeMode(AspectRatioFrameLayout.RESIZE_MODE_FIT);
                 videoView.post(() -> {
@@ -271,7 +382,39 @@ public class VideoAdapter extends RecyclerView.Adapter<VideoAdapter.VideoViewHol
         @SuppressLint("ClickableViewAccessibility")
         public void setVideoObjects(Video video) {
             tvTitle.setText("@" + video.getUsername());
-            txvDescription.setText(video.getDescription());
+            
+            // Setup Clickable Hashtags
+            String description = video.getDescription();
+            if (description != null) {
+                SpannableString spannableString = new SpannableString(description);
+                Matcher matcher = Pattern.compile("#([A-Za-z0-9_-]+)").matcher(description);
+                while (matcher.find()) {
+                    final String hashtag = matcher.group();
+                    int start = matcher.start();
+                    int end = matcher.end();
+                    spannableString.setSpan(new ClickableSpan() {
+                        @Override
+                        public void onClick(@NonNull View widget) {
+                            Intent intent = new Intent(context, SearchActivity.class);
+                            intent.putExtra("hashtag", hashtag);
+                            context.startActivity(intent);
+                        }
+
+                        @Override
+                        public void updateDrawState(@NonNull TextPaint ds) {
+                            super.updateDrawState(ds);
+                            ds.setUnderlineText(false);
+                            ds.setColor(Color.WHITE);
+                            ds.setFakeBoldText(true);
+                        }
+                    }, start, end, Spanned.SPAN_EXCLUSIVE_EXCLUSIVE);
+                }
+                txvDescription.setText(spannableString);
+                txvDescription.setMovementMethod(LinkMovementMethod.getInstance());
+            } else {
+                txvDescription.setText("");
+            }
+
             updateCounts(video);
 
             loadAuthorAvatar(video.getAuthorId());
@@ -291,6 +434,8 @@ public class VideoAdapter extends RecyclerView.Adapter<VideoAdapter.VideoViewHol
             tvTitle.setOnClickListener(openProfileListener);
 
             if (exoPlayer != null && currentUri.equals(video.getVideoUri())) {
+                applyVolumeToPlayer();
+                updateVolumeIcon();
                 return;
             }
 
@@ -344,6 +489,8 @@ public class VideoAdapter extends RecyclerView.Adapter<VideoAdapter.VideoViewHol
             exoPlayer.setMediaItem(MediaItem.fromUri(video.getVideoUri()));
             exoPlayer.setRepeatMode(Player.REPEAT_MODE_ONE);
             exoPlayer.prepare();
+            applyVolumeToPlayer();
+            updateVolumeIcon();
 
             if (getBindingAdapterPosition() == currentPosition) {
                 playVideo();
@@ -434,7 +581,6 @@ public class VideoAdapter extends RecyclerView.Adapter<VideoAdapter.VideoViewHol
                     int currentLikes = Integer.parseInt(tvLikeCount.getText().toString());
                     tvLikeCount.setText(String.valueOf(currentLikes + 1));
                     
-                    // Gửi thông báo khi có người Like
                     if (!user.getUid().equals(video.getAuthorId())) {
                         db.collection("users").document(user.getUid()).get().addOnSuccessListener(documentSnapshot -> {
                             if (documentSnapshot.exists()) {

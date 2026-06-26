@@ -16,10 +16,12 @@ import android.hardware.camera2.params.StreamConfigurationMap;
 import android.media.MediaRecorder;
 import android.media.MediaScannerConnection;
 import android.net.Uri;
+import android.os.Build;
 import android.os.Bundle;
 import android.os.Environment;
 import android.os.Handler;
 import android.os.HandlerThread;
+import android.provider.MediaStore;
 import android.util.Log;
 import android.util.Size;
 import android.util.SparseIntArray;
@@ -34,6 +36,7 @@ import android.widget.ImageButton;
 import android.widget.Toast;
 
 import androidx.annotation.NonNull;
+import androidx.annotation.Nullable;
 import androidx.core.app.ActivityCompat;
 import androidx.core.content.ContextCompat;
 
@@ -52,6 +55,7 @@ import java.util.Objects;
 public class CameraActivity extends Activity implements View.OnClickListener {
     private static final String TAG = "CameraActivity";
     private static final int REQUEST_PERMISSIONS = 101;
+    private static final int PICK_VIDEO_REQUEST = 102;
     
     private CameraManager manager;
     private FrameLayout cameraFrameLayout;
@@ -172,14 +176,24 @@ public class CameraActivity extends Activity implements View.OnClickListener {
     }
 
     private boolean hasPermissions() {
-        return ContextCompat.checkSelfPermission(this, Manifest.permission.CAMERA) == PackageManager.PERMISSION_GRANTED &&
+        boolean base = ContextCompat.checkSelfPermission(this, Manifest.permission.CAMERA) == PackageManager.PERMISSION_GRANTED &&
                ContextCompat.checkSelfPermission(this, Manifest.permission.RECORD_AUDIO) == PackageManager.PERMISSION_GRANTED;
+        
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+            return base && ContextCompat.checkSelfPermission(this, Manifest.permission.READ_MEDIA_VIDEO) == PackageManager.PERMISSION_GRANTED;
+        } else {
+            return base && ContextCompat.checkSelfPermission(this, Manifest.permission.READ_EXTERNAL_STORAGE) == PackageManager.PERMISSION_GRANTED;
+        }
     }
 
     private void requestPermissions() {
-        ActivityCompat.requestPermissions(this, 
-                new String[]{Manifest.permission.CAMERA, Manifest.permission.RECORD_AUDIO}, 
-                REQUEST_PERMISSIONS);
+        String[] perms;
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+            perms = new String[]{Manifest.permission.CAMERA, Manifest.permission.RECORD_AUDIO, Manifest.permission.READ_MEDIA_VIDEO};
+        } else {
+            perms = new String[]{Manifest.permission.CAMERA, Manifest.permission.RECORD_AUDIO, Manifest.permission.READ_EXTERNAL_STORAGE};
+        }
+        ActivityCompat.requestPermissions(this, perms, REQUEST_PERMISSIONS);
     }
 
     @SuppressLint("MissingPermission")
@@ -215,26 +229,40 @@ public class CameraActivity extends Activity implements View.OnClickListener {
                 }
             }
             if (allGranted) {
-                if (textureFront.isAvailable()) {
-                    setupCamera(textureFront.getWidth(), textureFront.getHeight());
-                }
+                if (textureFront.isAvailable()) setupCamera(textureFront.getWidth(), textureFront.getHeight());
             } else {
-                Toast.makeText(this, "Quyền Camera và Micro là bắt buộc", Toast.LENGTH_SHORT).show();
-                finish();
+                Toast.makeText(this, "Permissions required!", Toast.LENGTH_SHORT).show();
             }
         }
     }
 
     @Override
     public void onClick(View view) {
-        if (view.getId() == R.id.imb_flip_camera) {
+        int id = view.getId();
+        if (id == R.id.imb_flip_camera) {
             flipCamera();
-        } else if (view.getId() == R.id.button_record) {
+        } else if (id == R.id.button_record) {
             startRecording();
-        } else if (view.getId() == R.id.button_stop) {
+        } else if (id == R.id.button_stop) {
             stopRecording();
-        } else if (view.getId() == R.id.button_close) {
+        } else if (id == R.id.button_close) {
             finish();
+        } else if (id == R.id.btnUploadVideo) {
+            pickVideoFromGallery();
+        }
+    }
+
+    private void pickVideoFromGallery() {
+        Intent intent = new Intent(Intent.ACTION_PICK, MediaStore.Video.Media.EXTERNAL_CONTENT_URI);
+        startActivityForResult(intent, PICK_VIDEO_REQUEST);
+    }
+
+    @Override
+    protected void onActivityResult(int requestCode, int resultCode, @Nullable Intent data) {
+        super.onActivityResult(requestCode, resultCode, data);
+        if (requestCode == PICK_VIDEO_REQUEST && resultCode == RESULT_OK && data != null) {
+            Uri selectedVideo = data.getData();
+            startUploadingActivity(selectedVideo);
         }
     }
 
@@ -247,52 +275,31 @@ public class CameraActivity extends Activity implements View.OnClickListener {
 
     private void startRecording() {
         if (isRecording || mediaRecorder == null || cameraCaptureSession == null) return;
-        
         try {
-            // Kích hoạt Target Record để hình ảnh bắt đầu đổ vào MediaRecorder
             Surface recordSurface = mediaRecorder.getSurface();
             captureRequestBuilder.addTarget(recordSurface);
             cameraCaptureSession.setRepeatingRequest(captureRequestBuilder.build(), null, backgroundHandler);
-            
             mediaRecorder.start();
             isRecording = true;
             btnStopRecording.setVisibility(View.VISIBLE);
             btnFlip.setVisibility(View.GONE);
             btnStartRecording.setVisibility(View.GONE);
         } catch (Exception e) {
-            Log.e(TAG, "mediaRecorder.start() failed", e);
-            isRecording = false;
+            Log.e(TAG, "Recording start failed", e);
         }
     }
 
     private void stopRecording() {
         if (isRecording) {
-            boolean success = true;
             try {
-                // Ngừng gửi dữ liệu vào Record Surface
-                Surface recordSurface = mediaRecorder.getSurface();
-                captureRequestBuilder.removeTarget(recordSurface);
-                if (cameraCaptureSession != null) {
-                    cameraCaptureSession.setRepeatingRequest(captureRequestBuilder.build(), null, backgroundHandler);
-                }
-                
                 mediaRecorder.stop();
             } catch (Exception e) {
                 Log.e(TAG, "Stop fail", e);
-                success = false;
             }
-            
             mediaRecorder.reset();
             isRecording = false;
-
-            if (success) {
-                MediaScannerConnection.scanFile(this, new String[]{videoFileName}, null, (path, uri) -> {
-                    runOnUiThread(() -> startUploadingActivity(uri != null ? uri : Uri.fromFile(new File(path))));
-                });
-            } else {
-                Toast.makeText(this, "Quay video thất bại, hãy thử lại!", Toast.LENGTH_SHORT).show();
-                finish();
-            }
+            MediaScannerConnection.scanFile(this, new String[]{videoFileName}, null, null);
+            runOnUiThread(() -> startUploadingActivity(Uri.fromFile(new File(videoFileName))));
         }
     }
 
@@ -306,7 +313,6 @@ public class CameraActivity extends Activity implements View.OnClickListener {
                 if (facing != null && facing == CameraCharacteristics.LENS_FACING_BACK) backId = id;
             }
             if (defaultId == null) defaultId = backId != null ? backId : frontId;
-            
             StreamConfigurationMap map = manager.getCameraCharacteristics(defaultId).get(CameraCharacteristics.SCALER_STREAM_CONFIGURATION_MAP);
             if (map != null) {
                 previewSize = map.getOutputSizes(SurfaceTexture.class)[0];
@@ -331,15 +337,12 @@ public class CameraActivity extends Activity implements View.OnClickListener {
     private void startCameraSession() {
         SurfaceTexture st = textureFront.getSurfaceTexture();
         if (st == null || mainCamera == null || mediaRecorder == null) return;
-        
         st.setDefaultBufferSize(previewSize.getWidth(), previewSize.getHeight());
         Surface previewSurface = new Surface(st);
         Surface recordSurface = mediaRecorder.getSurface();
-
         try {
             captureRequestBuilder = mainCamera.createCaptureRequest(CameraDevice.TEMPLATE_RECORD);
             captureRequestBuilder.addTarget(previewSurface);
-
             mainCamera.createCaptureSession(Arrays.asList(previewSurface, recordSurface), new CameraCaptureSession.StateCallback() {
                 @Override
                 public void onConfigured(@NonNull CameraCaptureSession session) {
@@ -347,13 +350,11 @@ public class CameraActivity extends Activity implements View.OnClickListener {
                     try {
                         session.setRepeatingRequest(captureRequestBuilder.build(), null, backgroundHandler);
                     } catch (CameraAccessException e) {
-                        Log.e(TAG, "Session repeating request fail", e);
+                        Log.e(TAG, "Session fail", e);
                     }
                 }
                 @Override
-                public void onConfigureFailed(@NonNull CameraCaptureSession session) {
-                    Log.e(TAG, "Configuration failed");
-                }
+                public void onConfigureFailed(@NonNull CameraCaptureSession session) {}
             }, backgroundHandler);
         } catch (CameraAccessException e) {
             Log.e(TAG, "Capture session error", e);
@@ -363,23 +364,24 @@ public class CameraActivity extends Activity implements View.OnClickListener {
     private void setupMediaRecorder() throws IOException {
         if (mediaRecorder == null) mediaRecorder = new MediaRecorder();
         else mediaRecorder.reset();
-
         mediaRecorder.setAudioSource(MediaRecorder.AudioSource.MIC);
         mediaRecorder.setVideoSource(MediaRecorder.VideoSource.SURFACE);
         mediaRecorder.setOutputFormat(MediaRecorder.OutputFormat.MPEG_4);
-        
         String ts = new SimpleDateFormat("yyyyMMdd_HHmmss").format(new Date());
-        videoFileHolder = File.createTempFile(userId + "_" + ts, ".mp4", new File(videoFolder));
+        videoFileHolder = File.createTempFile(userId + "_" + ts, ".mp4", getExternalFilesDir(Environment.DIRECTORY_MOVIES));
         videoFileName = videoFileHolder.getAbsolutePath();
-        
         mediaRecorder.setOutputFile(videoFileName);
         mediaRecorder.setVideoEncodingBitRate(10000000);
         mediaRecorder.setVideoFrameRate(30);
         mediaRecorder.setVideoSize(videoSize.getWidth(), videoSize.getHeight());
         mediaRecorder.setVideoEncoder(MediaRecorder.VideoEncoder.H264);
         mediaRecorder.setAudioEncoder(MediaRecorder.AudioEncoder.AAC);
+        
+        // Sửa lỗi hướng video: Tính toán lại góc xoay
         int rotation = getWindowManager().getDefaultDisplay().getRotation();
-        mediaRecorder.setOrientationHint(ORIENTATIONS.get(rotation));
+        int orientationHint = ORIENTATIONS.get(rotation);
+        mediaRecorder.setOrientationHint(orientationHint);
+
         mediaRecorder.prepare();
     }
 
@@ -398,21 +400,20 @@ public class CameraActivity extends Activity implements View.OnClickListener {
                 backgroundHandlerThread.join();
                 backgroundHandlerThread = null;
                 backgroundHandler = null;
-            } catch (InterruptedException e) {
-                Log.e(TAG, "Thread stop failed", e);
-            }
+            } catch (InterruptedException e) {}
         }
     }
 
     private void createVideoFolder() {
-        File folder = new File(Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_MOVIES), "TopTopVideos");
-        if (!folder.exists()) folder.mkdirs();
-        videoFolder = folder.getAbsolutePath();
+        File folder = getExternalFilesDir(Environment.DIRECTORY_MOVIES);
+        if (folder != null && !folder.exists()) folder.mkdirs();
+        videoFolder = folder != null ? folder.getAbsolutePath() : getFilesDir().getAbsolutePath();
     }
 
     private void startUploadingActivity(Uri videoUri) {
         Intent i = new Intent(this, DescriptionVideoActivity.class);
         i.putExtra("videoUri", videoUri.toString());
+        i.addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION);
         startActivity(i);
         finish();
     }
