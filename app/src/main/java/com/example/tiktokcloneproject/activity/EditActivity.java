@@ -30,11 +30,14 @@ import com.google.firebase.auth.FirebaseUser;
 import com.google.firebase.firestore.DocumentReference;
 import com.google.firebase.firestore.DocumentSnapshot;
 import com.google.firebase.firestore.FirebaseFirestore;
+import com.google.firebase.firestore.SetOptions;
+import com.google.firebase.firestore.WriteBatch;
 
 import java.text.SimpleDateFormat;
 import java.util.Calendar;
 import java.util.HashMap;
 import java.util.Locale;
+import java.util.Map;
 
 public class EditActivity extends Activity implements View.OnClickListener {
 
@@ -144,7 +147,7 @@ public class EditActivity extends Activity implements View.OnClickListener {
                 }
 
                 setEnableSave(false);
-                db.collection("users")
+                db.collection("profiles")
                         .whereEqualTo("username", newUsername)
                         .get()
                         .addOnCompleteListener(task -> {
@@ -161,11 +164,14 @@ public class EditActivity extends Activity implements View.OnClickListener {
                                     updateUsername();
                                 } else {
                                     setEnableSave(true);
-                                    layoutInput.setError(getString(R.string.exist_username));
+                                    layoutInput.setError("Tên người dùng này đã được sử dụng");
+                                    Toast.makeText(EditActivity.this, "Tên người dùng đã tồn tại, vui lòng chọn tên khác", Toast.LENGTH_SHORT).show();
                                 }
                             } else {
                                 setEnableSave(true);
-                                Log.d(TAG, "Error getting documents: ", task.getException());
+                                String errorMsg = task.getException() != null ? task.getException().getMessage() : "Lỗi kiểm tra tên người dùng";
+                                Log.e(TAG, "Error getting documents: ", task.getException());
+                                Toast.makeText(EditActivity.this, errorMsg, Toast.LENGTH_SHORT).show();
                             }
                         });
             }
@@ -176,9 +182,12 @@ public class EditActivity extends Activity implements View.OnClickListener {
         tvLabel.setText(R.string.birthdate_label);
         edtInput.setHint("01/01/2000");
         edtInput.setText(content);
+        edtInput.setFocusable(false);
+        edtInput.setClickable(true);
+        edtInput.setCursorVisible(false);
         layoutInput.setStartIconDrawable(R.drawable.ic_calendar);
 
-        layoutInput.setStartIconOnClickListener(new View.OnClickListener() {
+        View.OnClickListener listener = new View.OnClickListener() {
             @Override
             public void onClick(View view) {
                 DatePickerDialog.OnDateSetListener date = new DatePickerDialog.OnDateSetListener() {
@@ -190,21 +199,24 @@ public class EditActivity extends Activity implements View.OnClickListener {
                         updateLabel();
                     }
                 };
-                DatePickerDialog datePickerDialog = new DatePickerDialog(EditActivity.this, date,myCalendar.get(Calendar.YEAR),myCalendar.get(Calendar.MONTH),myCalendar.get(Calendar.DAY_OF_MONTH));
+                DatePickerDialog datePickerDialog = new DatePickerDialog(EditActivity.this, date,
+                        myCalendar.get(Calendar.YEAR),
+                        myCalendar.get(Calendar.MONTH),
+                        myCalendar.get(Calendar.DAY_OF_MONTH));
                 datePickerDialog.show();
                 datePickerDialog.getButton(DialogInterface.BUTTON_NEGATIVE).setTextColor(getColor(R.color.tiktok_red));
                 datePickerDialog.getButton(DialogInterface.BUTTON_POSITIVE).setTextColor(getColor(R.color.tiktok_red));
-
             }
-        });
+        };
+
+        edtInput.setOnClickListener(listener);
+        layoutInput.setStartIconOnClickListener(listener);
 
         edtInput.addTextChangedListener(new TextWatcher() {
             @Override
-            public void beforeTextChanged(CharSequence charSequence, int i, int i1, int i2) {
-            }
+            public void beforeTextChanged(CharSequence charSequence, int i, int i1, int i2) {}
             @Override
-            public void onTextChanged(CharSequence charSequence, int i, int i1, int i2) {
-            }
+            public void onTextChanged(CharSequence charSequence, int i, int i1, int i2) {}
             @Override
             public void afterTextChanged(Editable editable) {
                 if(!validator.isValidBirthdate(editable.toString())) {
@@ -242,22 +254,38 @@ public class EditActivity extends Activity implements View.OnClickListener {
 
     private void updateUsername() {
         String username = edtInput.getText().toString();
-        if (user == null) return;
+        if (user == null) {
+            Toast.makeText(this, "Vui lòng đăng nhập lại", Toast.LENGTH_SHORT).show();
+            return;
+        }
 
+        Log.d(TAG, "Updating username to: " + username);
+
+        WriteBatch batch = db.batch();
         DocumentReference userDoc = db.collection("users").document(user.getUid());
         DocumentReference profileDoc = db.collection("profiles").document(user.getUid());
 
-        userDoc.update("username", username)
+        Map<String, Object> data = new HashMap<>();
+        data.put("username", username);
+
+        // Sử dụng set với merge để tự động tạo nếu chưa có document
+        batch.set(userDoc, data, SetOptions.merge());
+        batch.set(profileDoc, data, SetOptions.merge());
+
+        batch.commit()
                 .addOnSuccessListener(aVoid -> {
-                    profileDoc.update("username", username)
-                            .addOnSuccessListener(aVoid1 -> {
-                                Toast.makeText(EditActivity.this, "Username updated", Toast.LENGTH_SHORT).show();
-                                backToEditProfile();
-                            });
+                    Toast.makeText(EditActivity.this, "Cập nhật tên người dùng thành công", Toast.LENGTH_SHORT).show();
+                    backToEditProfile();
                 })
                 .addOnFailureListener(e -> {
+                    Log.e(TAG, "Lỗi cập nhật Batch", e);
                     setEnableSave(true);
-                    Toast.makeText(EditActivity.this, "Update failed", Toast.LENGTH_SHORT).show();
+                    String errorMsg = e.getMessage();
+                    if (errorMsg != null && errorMsg.contains("PERMISSION_DENIED")) {
+                        Toast.makeText(EditActivity.this, "Lỗi: Bạn không có quyền sửa dữ liệu này. Hãy kiểm tra lại Rules trên Firebase.", Toast.LENGTH_LONG).show();
+                    } else {
+                        Toast.makeText(EditActivity.this, "Lỗi: " + errorMsg, Toast.LENGTH_SHORT).show();
+                    }
                 });
     }
 

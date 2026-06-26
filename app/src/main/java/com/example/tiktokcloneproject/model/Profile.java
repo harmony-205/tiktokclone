@@ -32,7 +32,7 @@ public class Profile implements Serializable {
         HashMap<String, Object> result = new HashMap<>();
         result.put("userId", userId);
         result.put("username", username);
-        result.put("avatarName", avatarUri);
+        result.put("avatarUrl", avatarUri);
         result.put("isPrivate", isPrivate);
         result.put("following", following);
         result.put("followers", followers);
