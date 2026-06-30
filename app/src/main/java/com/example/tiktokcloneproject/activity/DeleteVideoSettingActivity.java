@@ -3,8 +3,8 @@ package com.example.tiktokcloneproject.activity;
 import androidx.annotation.NonNull;
 import androidx.appcompat.app.ActionBar;
 import androidx.appcompat.app.AppCompatActivity;
+import androidx.appcompat.app.AlertDialog;
 
-import android.app.AlertDialog;
 import android.content.DialogInterface;
 import android.content.Intent;
 import android.graphics.Color;
@@ -23,6 +23,7 @@ import com.google.android.gms.tasks.OnSuccessListener;
 import com.google.android.gms.tasks.Task;
 import com.google.firebase.firestore.DocumentSnapshot;
 import com.google.firebase.firestore.FirebaseFirestore;
+import com.google.firebase.firestore.QueryDocumentSnapshot;
 import com.google.firebase.storage.FirebaseStorage;
 import com.google.firebase.storage.StorageReference;
 
@@ -55,15 +56,14 @@ public class DeleteVideoSettingActivity extends AppCompatActivity {
 
         Intent intent = getIntent();
         Bundle bundle = intent.getExtras();
-        videoId = bundle.getString("videoId");
-        authorVideoId = bundle.getString("authorId");
-
+        if (bundle != null) {
+            videoId = bundle.getString("videoId");
+            authorVideoId = bundle.getString("authorId");
+        }
 
         imvBackToVideo.setOnClickListener(new View.OnClickListener() {
             @Override
             public void onClick(View view) {
-//                Intent intent = new Intent(SettingsAndPrivacyActivity.this, ProfileActivity.class);
-//                startActivity(intent);
                 onBackPressed();
                 finish();
             }
@@ -72,7 +72,9 @@ public class DeleteVideoSettingActivity extends AppCompatActivity {
         flDeleteVideo.setOnClickListener(new View.OnClickListener() {
             @Override
             public void onClick(View view) {
-                AlertDialog.Builder builder1 = new AlertDialog.Builder(DeleteVideoSettingActivity.this);
+                // Sử dụng androidx.appcompat.app.AlertDialog và áp dụng theme chuẩn để hiện nút bấm
+                AlertDialog.Builder builder1 = new AlertDialog.Builder(DeleteVideoSettingActivity.this, R.style.AlertDialogTheme);
+                builder1.setTitle("Delete Video");
                 builder1.setMessage("Are you sure you want to delete this video?");
                 builder1.setCancelable(true);
 
@@ -81,167 +83,103 @@ public class DeleteVideoSettingActivity extends AppCompatActivity {
                         new DialogInterface.OnClickListener() {
                             public void onClick(DialogInterface dialog, int id) {
                                 String url = "videos/" + videoId + ".mp4";
-                                Log.d("URL", url);
                                 FirebaseStorage storage = FirebaseStorage.getInstance();
-                                StorageReference storageRef = storage.getReference();
-
-                                StorageReference desertRef = storageRef.child(url);
+                                StorageReference desertRef = storage.getReference().child(url);
 
                                 desertRef.delete().addOnSuccessListener(new OnSuccessListener<Void>() {
                                     @Override
                                     public void onSuccess(Void aVoid) {
                                         deleteVideoIdOnHashTag(videoId);
-                                        Toast.makeText(DeleteVideoSettingActivity.this, "Delete successfully", Toast.LENGTH_SHORT).show();
-                                        Intent intent = new Intent(DeleteVideoSettingActivity.this, HomeScreenActivity.class);
-                                        intent.addFlags(Intent.FLAG_ACTIVITY_CLEAR_TOP);
-                                        startActivity(intent);
-                                        finish();
                                     }
                                 }).addOnFailureListener(new OnFailureListener() {
                                     @Override
                                     public void onFailure(@NonNull Exception exception) {
-                                        Toast.makeText(DeleteVideoSettingActivity.this, "Failed: " + exception.getMessage(), Toast.LENGTH_SHORT).show();
+                                        // Vẫn tiếp tục xóa metadata dù file vật lý có thể đã bị xóa trước đó
+                                        deleteVideoIdOnHashTag(videoId);
                                     }
                                 });
                                 dialog.dismiss();
                             }
                         });
 
-                builder1.setNegativeButton("Cancel", new DialogInterface.OnClickListener() {
-                    @Override
-                    public void onClick(DialogInterface dialog, int which) {
-                        dialog.dismiss();
-                    }
-                });
+                builder1.setNegativeButton("Cancel", (dialog, which) -> dialog.dismiss());
 
                 AlertDialog alert11 = builder1.create();
                 alert11.show();
 
-                // Fix white on white buttons
+                // Đảm bảo nút Delete có màu đỏ để cảnh báo và dễ nhìn thấy
                 Button pBtn = alert11.getButton(DialogInterface.BUTTON_POSITIVE);
-                if (pBtn != null) {
-                    pBtn.setTextColor(Color.RED);
-                }
+                if (pBtn != null) pBtn.setTextColor(Color.RED);
                 Button nBtn = alert11.getButton(DialogInterface.BUTTON_NEGATIVE);
-                if (nBtn != null) {
-                    nBtn.setTextColor(Color.BLACK);
-                }
+                if (nBtn != null) nBtn.setTextColor(Color.BLACK);
             }
         });
     }
 
     void deleteVideoIdOnVideoCollection(String videoId) {
-        db.collection("videos").document(videoId).delete().addOnSuccessListener(new OnSuccessListener<Void>() {
-            @Override
-            public void onSuccess(Void unused) {
-                deleteVideoIdOnPublicVideos(videoId, authorVideoId);
-            }
-        }).addOnFailureListener(new OnFailureListener() {
-            @Override
-            public void onFailure(@NonNull Exception e) {
-
-            }
-        });
+        db.collection("videos").document(videoId).delete().addOnSuccessListener(unused -> deleteVideoIdOnPublicVideos(videoId, authorVideoId));
     }
+
     void deleteVideoIdOnPublicVideos(String videoId, String userId) {
-        db.collection("profiles").document(userId).collection("public_videos").document(videoId).delete().addOnSuccessListener(new OnSuccessListener<Void>() {
-            @Override
-            public void onSuccess(Void unused) {
-                deleteVideoIdOnVideoSummaries(videoId);
-            }
-        }).addOnFailureListener(new OnFailureListener() {
-            @Override
-            public void onFailure(@NonNull Exception e) {
-
-            }
-        });
-    }
-
-    void deleteVideoIdOnLikes(String videoId) {
-        db.collection("likes").document(videoId).delete().addOnSuccessListener(new OnSuccessListener<Void>() {
-            @Override
-            public void onSuccess(Void unused) {
-                deleteVideoIdOnComment(videoId);
-            }
-        }).addOnFailureListener(new OnFailureListener() {
-            @Override
-            public void onFailure(@NonNull Exception e) {
-
-            }
-        });
+        db.collection("profiles").document(userId).collection("public_videos").document(videoId).delete().addOnSuccessListener(unused -> deleteVideoIdOnVideoSummaries(videoId));
     }
 
     void deleteVideoIdOnVideoSummaries(String videoId) {
-        db.collection("video_summaries").document(videoId).delete().addOnSuccessListener(new OnSuccessListener<Void>() {
-            @Override
-            public void onSuccess(Void unused) {
-                deleteVideoIdOnLikes(videoId);
-            }
-        }).addOnFailureListener(new OnFailureListener() {
-            @Override
-            public void onFailure(@NonNull Exception e) {
-
-            }
-        });
+        db.collection("video_summaries").document(videoId).delete().addOnSuccessListener(unused -> deleteVideoIdOnLikes(videoId));
     }
 
-    void deleteVideoIdOnComment(String videoId) {
-        db.collection("comments").document(videoId).delete().addOnSuccessListener(new OnSuccessListener<Void>() {
-            @Override
-            public void onSuccess(Void unused) {
+    void deleteVideoIdOnLikes(String videoId) {
+        db.collection("likes").document(videoId).delete().addOnSuccessListener(unused -> deleteCommentsOfVideo(videoId));
+    }
+
+    // SỬA LỖI: Xóa toàn bộ bình luận của Video thay vì xóa document có ID là videoId
+    void deleteCommentsOfVideo(String videoId) {
+        db.collection("comments")
+            .whereEqualTo("videoId", videoId)
+            .get()
+            .addOnSuccessListener(queryDocumentSnapshots -> {
+                for (QueryDocumentSnapshot doc : queryDocumentSnapshots) {
+                    String commentId = doc.getId();
+                    // Xóa các lượt like của bình luận này
+                    db.collection("comment_likes").document(commentId).delete();
+                    // Xóa chính bình luận
+                    doc.getReference().delete();
+                }
+                
                 Toast.makeText(DeleteVideoSettingActivity.this, "Delete successfully", Toast.LENGTH_SHORT).show();
                 Intent intent = new Intent(DeleteVideoSettingActivity.this, HomeScreenActivity.class);
                 intent.addFlags(Intent.FLAG_ACTIVITY_CLEAR_TOP);
                 startActivity(intent);
-            }
-        }).addOnFailureListener(new OnFailureListener() {
-            @Override
-            public void onFailure(@NonNull Exception e) {
-
-            }
-        });
+                finish();
+            })
+            .addOnFailureListener(e -> {
+                Toast.makeText(DeleteVideoSettingActivity.this, "Error deleting comments", Toast.LENGTH_SHORT).show();
+                finish();
+            });
     }
 
     List<String> getHashTagListFromDescription(String description) {
-        String str=description;
         Pattern MY_PATTERN = Pattern.compile("#(\\S+)");
-        Matcher mat = MY_PATTERN.matcher(str);
-        List<String> hashTagList =new ArrayList<String>();
+        Matcher mat = MY_PATTERN.matcher(description);
+        List<String> hashTagList = new ArrayList<>();
         while (mat.find()) {
             hashTagList.add("#" + mat.group(1));
         }
-
         return hashTagList;
     }
 
     void deleteVideoIdOnHashTag(String videoId) {
-        db.collection("videos").document(videoId).get().addOnCompleteListener(new OnCompleteListener<DocumentSnapshot>() {
-            @Override
-            public void onComplete(@NonNull Task<DocumentSnapshot> task) {
-                if (task.isSuccessful()) {
-                    DocumentSnapshot documentSnapshot = task.getResult();
-                    if (documentSnapshot.exists()) {
-                        String description = documentSnapshot.get("description").toString();
-                        List<String> hashTagsList = getHashTagListFromDescription(description);
-
-                        for (int i = 0; i < hashTagsList.size(); i++) {
-                            db.collection("hashtags").document(hashTagsList.get(i)).collection("video_summaries").document(videoId).delete().addOnSuccessListener(new OnSuccessListener<Void>() {
-                                @Override
-                                public void onSuccess(Void unused) {
-
-                                }
-                            }).addOnFailureListener(new OnFailureListener() {
-                                @Override
-                                public void onFailure(@NonNull Exception e) {
-
-                                }
-                            });
-                        }
-
-                        deleteVideoIdOnVideoCollection(videoId);
+        db.collection("videos").document(videoId).get().addOnCompleteListener(task -> {
+            if (task.isSuccessful() && task.getResult().exists()) {
+                String description = task.getResult().getString("description");
+                if (description != null) {
+                    List<String> hashTagsList = getHashTagListFromDescription(description);
+                    for (String tag : hashTagsList) {
+                        db.collection("hashtags").document(tag).collection("video_summaries").document(videoId).delete();
                     }
                 }
             }
+            deleteVideoIdOnVideoCollection(videoId);
         });
     }
 }

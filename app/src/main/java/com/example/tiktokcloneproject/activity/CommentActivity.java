@@ -96,7 +96,6 @@ public class CommentActivity extends Activity implements View.OnClickListener {
             return;
         }
 
-        // Lắng nghe bình luận real-time và TỰ ĐỘNG CẬP NHẬT SỐ LƯỢNG
         db.collection("comments")
                 .whereEqualTo("videoId", videoId)
                 .addSnapshotListener((snapshots, e) -> {
@@ -107,40 +106,54 @@ public class CommentActivity extends Activity implements View.OnClickListener {
                     if (snapshots != null) {
                         for (DocumentChange dc : snapshots.getDocumentChanges()) {
                             Comment comment = dc.getDocument().toObject(Comment.class);
-                            if (dc.getType() == DocumentChange.Type.ADDED) {
-                                boolean exists = false;
-                                for (Comment c : comments) {
-                                    if (c.getCommentId().equals(comment.getCommentId())) {
-                                        exists = true;
-                                        break;
+                            switch (dc.getType()) {
+                                case ADDED:
+                                    if (!containsComment(comment.getCommentId())) {
+                                        comments.add(0, comment);
                                     }
-                                }
-                                if (!exists) {
-                                    comments.add(0, comment);
-                                }
-                            } else if (dc.getType() == DocumentChange.Type.REMOVED) {
-                                for (int i = 0; i < comments.size(); i++) {
-                                    if (comments.get(i).getCommentId().equals(comment.getCommentId())) {
-                                        comments.remove(i);
-                                        break;
-                                    }
-                                }
+                                    break;
+                                case MODIFIED:
+                                    updateCommentInList(comment);
+                                    break;
+                                case REMOVED:
+                                    removeCommentFromList(comment.getCommentId());
+                                    break;
                             }
                         }
                         adapter.notifyDataSetChanged();
-                        
-                        // CẬP NHẬT SỐ LƯỢNG DỰA TRÊN SỐ LƯỢNG THỰC TẾ TRONG SNAPSHOT
-                        int actualCount = snapshots.size();
-                        updateVideoCommentCount(actualCount);
+                        updateVideoCommentCount(snapshots.size());
                     }
                 });
     }
 
+    private boolean containsComment(String id) {
+        for (Comment c : comments) {
+            if (c.getCommentId().equals(id)) return true;
+        }
+        return false;
+    }
+
+    private void updateCommentInList(Comment updatedComment) {
+        for (int i = 0; i < comments.size(); i++) {
+            if (comments.get(i).getCommentId().equals(updatedComment.getCommentId())) {
+                comments.set(i, updatedComment);
+                break;
+            }
+        }
+    }
+
+    private void removeCommentFromList(String id) {
+        for (int i = 0; i < comments.size(); i++) {
+            if (comments.get(i).getCommentId().equals(id)) {
+                comments.remove(i);
+                break;
+            }
+        }
+    }
+
     private void updateVideoCommentCount(int count) {
         if (videoId != null) {
-            db.collection("videos").document(videoId)
-                    .update("totalComments", count)
-                    .addOnSuccessListener(aVoid -> Log.d(TAG, "Đã đồng bộ số bình luận: " + count));
+            db.collection("videos").document(videoId).update("totalComments", count);
         }
     }
 
@@ -157,7 +170,7 @@ public class CommentActivity extends Activity implements View.OnClickListener {
             
             db.collection("comments").document(comment.getCommentId()).set(comment)
                 .addOnSuccessListener(aVoid -> {
-                    if (username != null) {
+                    if (username != null && authorVideoId != null && !authorVideoId.equals(user.getUid())) {
                         Notification.pushNotification(username, authorVideoId, StaticVariable.COMMENT);
                     }
                     edtComment.setText("");
