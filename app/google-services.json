@@ -1,49 +1,41 @@
 {
   "project_info": {
-    "project_number": "996817465542",
-    "project_id": "tiktokcloneproject-4eb20",
-    "storage_bucket": "tiktokcloneproject-4eb20.firebasestorage.app"
+    "project_number": "925950656899",
+    "project_id": "imgay-88474",
+    "storage_bucket": "imgay-88474.firebasestorage.app"
   },
   "client": [
     {
       "client_info": {
-        "mobilesdk_app_id": "1:996817465542:android:c589c47cb26204b08967c7",
+        "mobilesdk_app_id": "1:925950656899:android:5c87ed80ab74e7015f36b6",
         "android_client_info": {
           "package_name": "com.example.tiktokcloneproject"
         }
       },
       "oauth_client": [
         {
-          "client_id": "996817465542-alpsg0h75q46f05oo95cic1s8tr0ll3n.apps.googleusercontent.com",
+          "client_id": "925950656899-i0sck21c7nl027a3co019nv6dsr63aq5.apps.googleusercontent.com",
           "client_type": 1,
           "android_info": {
             "package_name": "com.example.tiktokcloneproject",
-            "certificate_hash": "89b167dff64bd07dffaafd9e0449792d4d51a771"
+            "certificate_hash": "f608b4459c8c2f86e2c2c916e6396bceeece0359"
           }
         },
         {
-          "client_id": "996817465542-sdvresblv0e69ee6ai27thkh85il5lpo.apps.googleusercontent.com",
-          "client_type": 1,
-          "android_info": {
-            "package_name": "com.example.tiktokcloneproject",
-            "certificate_hash": "28896a6bace6a854daa8c0e786edda466a1f1769"
-          }
-        },
-        {
-          "client_id": "996817465542-qt39vo4n1u3i2ilrnp0vi36s18h2smvb.apps.googleusercontent.com",
+          "client_id": "925950656899-jf4b8qki259gm5dgkofb41rb8v4p2tr4.apps.googleusercontent.com",
           "client_type": 3
         }
       ],
       "api_key": [
         {
-          "current_key": "AIzaSyBnZhDiMJLDiJPvtH7IM21_4Nn2t81I7iM"
+          "current_key": "AIzaSyDKgZev-WXJuK7K_q5v9mgpE0eoFvz9MBU"
         }
       ],
       "services": {
         "appinvite_service": {
           "other_platform_oauth_client": [
             {
-              "client_id": "996817465542-qt39vo4n1u3i2ilrnp0vi36s18h2smvb.apps.googleusercontent.com",
+              "client_id": "925950656899-jf4b8qki259gm5dgkofb41rb8v4p2tr4.apps.googleusercontent.com",
               "client_type": 3
             }
           ]
